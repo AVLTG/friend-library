@@ -153,3 +153,27 @@ export async function PATCH(
 
   return NextResponse.json(userBook);
 }
+
+// Delete a book from the shared library
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await getSession();
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { id } = await params;
+
+  const book = await db.select().from(books).where(eq(books.id, id)).get();
+  if (!book) {
+    return NextResponse.json({ error: "Book not found" }, { status: 404 });
+  }
+
+  // Delete all user_book relationships first, then the book
+  await db.delete(userBooks).where(eq(userBooks.bookId, id));
+  await db.delete(books).where(eq(books.id, id));
+
+  return NextResponse.json({ success: true });
+}

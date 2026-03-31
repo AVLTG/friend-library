@@ -16,6 +16,7 @@ import {
   Layers,
   Check,
   X,
+  Trash2,
 } from "lucide-react";
 import StarRating from "@/components/StarRating";
 
@@ -84,6 +85,8 @@ export default function BookDetailPage({
   const [reviewText, setReviewText] = useState("");
   const [reviewRating, setReviewRating] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     fetchBook();
@@ -137,6 +140,20 @@ export default function BookDetailPage({
       console.error("Failed to submit review:", error);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function deleteBook() {
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/books/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        router.push("/library");
+      }
+    } catch (error) {
+      console.error("Failed to delete:", error);
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -310,7 +327,51 @@ export default function BookDetailPage({
                 <Star className="w-4 h-4" />
                 {userBook?.rating ? "Edit Review" : "Rate & Review"}
               </button>
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition-colors text-sm font-medium ml-auto"
+              >
+                <Trash2 className="w-4 h-4" />
+                Remove
+              </button>
             </div>
+
+            {/* Delete confirmation */}
+            <AnimatePresence>
+              {showDeleteConfirm && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="overflow-hidden mt-4"
+                >
+                  <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                    <p className="text-red-800 text-sm font-medium mb-1">
+                      Remove &quot;{book.title}&quot; from the shared library?
+                    </p>
+                    <p className="text-red-600 text-xs mb-3">
+                      This will remove the book and all associated reviews, ratings, and ownership records for everyone.
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={deleteBook}
+                        disabled={deleting}
+                        className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-50"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        {deleting ? "Removing..." : "Yes, remove it"}
+                      </button>
+                      <button
+                        onClick={() => setShowDeleteConfirm(false)}
+                        className="px-4 py-2 text-warm-600 hover:bg-warm-100 rounded-lg text-sm font-medium transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         </div>
 
