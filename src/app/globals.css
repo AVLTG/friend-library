@@ -1,0 +1,88 @@
+@import "tailwindcss";
+
+@theme {
+  --color-cream: #FDF6EC;
+  --color-cream-dark: #F5E6D0;
+  --color-parchment: #F0E4D1;
+  --color-warm-50: #FAF5EE;
+  --color-warm-100: #F5E6D0;
+  --color-warm-200: #E8D5B8;
+  --color-warm-300: #D4B896;
+  --color-warm-400: #C4956A;
+  --color-warm-500: #A67B5B;
+  --color-warm-600: #8B6914;
+  --color-warm-700: #6B4F36;
+  --color-warm-800: #4A3728;
+  --color-warm-900: #3D2B1F;
+
+  --color-wood-light: #C4956A;
+  --color-wood: #8B6914;
+  --color-wood-dark: #6B4F36;
+  --color-wood-darker: #4A3728;
+
+  --color-accent: #B8860B;
+  --color-accent-light: #DAA520;
+  --color-accent-muted: #C4956A;
+
+  --color-spine-red: #8B3A3A;
+  --color-spine-blue: #3A5A8B;
+  --color-spine-green: #3A6B4F;
+  --color-spine-brown: #6B4F36;
+  --color-spine-burgundy: #722F37;
+  --color-spine-navy: #2C3E6B;
+  --color-spine-forest: #2D5A3D;
+  --color-spine-plum: #5B3256;
+  --color-spine-rust: #8B4513;
+  --color-spine-teal: #2F6B6B;
+
+  --font-serif: "Merriweather", Georgia, "Times New Roman", serif;
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+}
+
+@layer base {
+  body {
+    background-color: var(--color-cream);
+    color: var(--color-warm-900);
+    font-family: var(--font-sans);
+  }
+
+  ::selection {
+    background-color: var(--color-warm-300);
+    color: var(--color-warm-900);
+  }
+
+  ::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: var(--color-cream-dark);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-warm-400);
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-warm-500);
+  }
+}
+
+@utility shelf-shadow {
+  box-shadow:
+    0 4px 6px -1px rgba(74, 55, 40, 0.2),
+    0 2px 4px -2px rgba(74, 55, 40, 0.15),
+    inset 0 -3px 6px rgba(74, 55, 40, 0.1);
+}
+
+@utility card-warm {
+  background-color: var(--color-warm-50);
+  border: 1px solid var(--color-warm-200);
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(74, 55, 40, 0.08);
+}
+
+@utility text-balance {
+  text-wrap: balance;
+}
