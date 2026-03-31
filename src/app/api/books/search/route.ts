@@ -19,9 +19,10 @@ export async function GET(request: Request) {
     const results = await searchBooks(query);
     return NextResponse.json(results);
   } catch (error) {
-    console.error("Book search error:", error);
+    const message = error instanceof Error ? error.message : "Unknown error";
+    console.error("Book search error:", message);
     return NextResponse.json(
-      { error: "Failed to search books" },
+      { error: "Failed to search books", detail: message },
       { status: 500 }
     );
   }

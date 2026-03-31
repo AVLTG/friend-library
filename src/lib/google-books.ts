@@ -33,12 +33,22 @@ export async function searchBooks(query: string): Promise<GoogleBookResult[]> {
   });
   if (apiKey) params.set("key", apiKey);
 
-  const response = await fetch(
-    `https://www.googleapis.com/books/v1/volumes?${params}`
-  );
+  const url = `https://www.googleapis.com/books/v1/volumes?${params}`;
+  let response = await fetch(url);
+
+  // If it fails with an API key, retry without it
+  if (!response.ok && apiKey) {
+    params.delete("key");
+    response = await fetch(
+      `https://www.googleapis.com/books/v1/volumes?${params}`
+    );
+  }
 
   if (!response.ok) {
-    throw new Error(`Google Books API error: ${response.status}`);
+    const body = await response.text().catch(() => "");
+    throw new Error(
+      `Google Books API error: ${response.status} - ${body.slice(0, 200)}`
+    );
   }
 
   const data = await response.json();

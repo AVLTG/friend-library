@@ -50,7 +50,7 @@ export default function BookSpine({ book, index, onClick }: BookSpineProps) {
 
   return (
     <motion.div
-      className="relative flex-shrink-0 cursor-pointer"
+      className="relative flex-shrink-0 cursor-pointer h-[190px]"
       style={{ width: spineWidth }}
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}

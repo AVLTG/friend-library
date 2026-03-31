@@ -16,7 +16,7 @@ export default function Shelf({ children, shelfIndex }: ShelfProps) {
       className="relative"
     >
       {/* Books container */}
-      <div className="relative flex items-end gap-[2px] px-6 pb-0 min-h-[220px] pt-4">
+      <div className="relative flex items-end gap-[2px] px-6 pb-0 h-[220px] pt-4">
         {children}
       </div>
 
