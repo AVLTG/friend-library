@@ -301,7 +301,7 @@ export default function BookDetailPage({
             )}
 
             {/* Action buttons */}
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap gap-3 mb-3">
               <StatusButton
                 active={userBook?.owned ?? false}
                 icon={<BookOpen className="w-4 h-4" />}
@@ -327,14 +327,14 @@ export default function BookDetailPage({
                 <Star className="w-4 h-4" />
                 {userBook?.rating ? "Edit Review" : "Rate & Review"}
               </button>
-              <button
-                onClick={() => setShowDeleteConfirm(true)}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition-colors text-sm font-medium ml-auto"
-              >
-                <Trash2 className="w-4 h-4" />
-                Remove
-              </button>
             </div>
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors text-xs"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Remove from library
+            </button>
 
             {/* Delete confirmation */}
             <AnimatePresence>

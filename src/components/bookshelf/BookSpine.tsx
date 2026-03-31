@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
 import { Star } from "lucide-react";
@@ -25,11 +25,22 @@ interface BookSpineProps {
 export default function BookSpine({ book, index, onClick }: BookSpineProps) {
   const [isHovered, setIsHovered] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [previewBelow, setPreviewBelow] = useState(false);
   const hoverTimeout = useRef<ReturnType<typeof setTimeout>>(null);
+  const spineRef = useRef<HTMLDivElement>(null);
   const spineWidth = Math.max(28, Math.min(55, (book.pageCount || 200) / 8));
+
+  const checkPosition = useCallback(() => {
+    if (!spineRef.current) return;
+    const rect = spineRef.current.getBoundingClientRect();
+    // If the top of the spine is less than 320px from viewport top,
+    // show preview below instead of above
+    setPreviewBelow(rect.top < 320);
+  }, []);
 
   function handleMouseEnter() {
     setIsHovered(true);
+    checkPosition();
     hoverTimeout.current = setTimeout(() => setShowPreview(true), 600);
   }
 
@@ -39,7 +50,6 @@ export default function BookSpine({ book, index, onClick }: BookSpineProps) {
     if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
   }
 
-  // Lighten color for text readability
   function lightenColor(hex: string, amount: number): string {
     const num = parseInt(hex.replace("#", ""), 16);
     const r = Math.min(255, (num >> 16) + amount);
@@ -50,6 +60,7 @@ export default function BookSpine({ book, index, onClick }: BookSpineProps) {
 
   return (
     <motion.div
+      ref={spineRef}
       className="relative flex-shrink-0 cursor-pointer h-[190px]"
       style={{ width: spineWidth }}
       initial={{ opacity: 0, y: 20 }}
@@ -72,27 +83,47 @@ export default function BookSpine({ book, index, onClick }: BookSpineProps) {
         }}
         transition={{ type: "spring", stiffness: 300, damping: 20 }}
       >
-        {/* Spine texture/gradient */}
+        {/* Cover image as spine background */}
+        {book.coverUrl ? (
+          <Image
+            src={book.coverUrl}
+            alt=""
+            fill
+            className="object-cover"
+            sizes={`${spineWidth}px`}
+          />
+        ) : null}
+
+        {/* Spine texture/gradient overlay */}
         <div
           className="absolute inset-0"
           style={{
-            background: `linear-gradient(90deg,
-              rgba(0,0,0,0.15) 0%,
-              rgba(255,255,255,0.08) 15%,
-              rgba(255,255,255,0.05) 50%,
-              rgba(0,0,0,0.1) 85%,
-              rgba(0,0,0,0.2) 100%)`,
+            background: book.coverUrl
+              ? `linear-gradient(90deg,
+                  rgba(0,0,0,0.3) 0%,
+                  rgba(0,0,0,0.1) 20%,
+                  rgba(0,0,0,0.05) 50%,
+                  rgba(0,0,0,0.1) 80%,
+                  rgba(0,0,0,0.35) 100%)`
+              : `linear-gradient(90deg,
+                  rgba(0,0,0,0.15) 0%,
+                  rgba(255,255,255,0.08) 15%,
+                  rgba(255,255,255,0.05) 50%,
+                  rgba(0,0,0,0.1) 85%,
+                  rgba(0,0,0,0.2) 100%)`,
           }}
         />
 
-        {/* Top decoration line */}
-        <div
-          className="absolute top-3 left-1/2 -translate-x-1/2 h-[1px] rounded-full"
-          style={{
-            width: spineWidth - 10,
-            backgroundColor: lightenColor(book.spineColor, 60),
-          }}
-        />
+        {/* Top decoration line (only if no cover) */}
+        {!book.coverUrl && (
+          <div
+            className="absolute top-3 left-1/2 -translate-x-1/2 h-[1px] rounded-full"
+            style={{
+              width: spineWidth - 10,
+              backgroundColor: lightenColor(book.spineColor, 60),
+            }}
+          />
+        )}
 
         {/* Title on spine */}
         <div
@@ -101,20 +132,27 @@ export default function BookSpine({ book, index, onClick }: BookSpineProps) {
         >
           <span
             className="text-[10px] font-serif font-bold leading-tight tracking-wide truncate max-h-[85%]"
-            style={{ color: lightenColor(book.spineColor, 140) }}
+            style={{
+              color: book.coverUrl ? "#fff" : lightenColor(book.spineColor, 140),
+              textShadow: book.coverUrl
+                ? "0 1px 3px rgba(0,0,0,0.8), 0 0px 6px rgba(0,0,0,0.4)"
+                : "none",
+            }}
           >
             {book.title}
           </span>
         </div>
 
-        {/* Bottom decoration line */}
-        <div
-          className="absolute bottom-3 left-1/2 -translate-x-1/2 h-[1px] rounded-full"
-          style={{
-            width: spineWidth - 10,
-            backgroundColor: lightenColor(book.spineColor, 60),
-          }}
-        />
+        {/* Bottom decoration line (only if no cover) */}
+        {!book.coverUrl && (
+          <div
+            className="absolute bottom-3 left-1/2 -translate-x-1/2 h-[1px] rounded-full"
+            style={{
+              width: spineWidth - 10,
+              backgroundColor: lightenColor(book.spineColor, 60),
+            }}
+          />
+        )}
 
         {/* Hover glow */}
         {isHovered && (
@@ -123,7 +161,7 @@ export default function BookSpine({ book, index, onClick }: BookSpineProps) {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             style={{
-              background: `radial-gradient(ellipse at center, rgba(255,255,255,0.1) 0%, transparent 70%)`,
+              background: `radial-gradient(ellipse at center, rgba(255,255,255,0.15) 0%, transparent 70%)`,
             }}
           />
         )}
@@ -133,11 +171,13 @@ export default function BookSpine({ book, index, onClick }: BookSpineProps) {
       <AnimatePresence>
         {showPreview && (
           <motion.div
-            initial={{ opacity: 0, y: 10, scale: 0.9 }}
+            initial={{ opacity: 0, y: previewBelow ? -10 : 10, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 10, scale: 0.9 }}
+            exit={{ opacity: 0, y: previewBelow ? -10 : 10, scale: 0.9 }}
             transition={{ type: "spring", stiffness: 400, damping: 25 }}
-            className="absolute bottom-full mb-4 left-1/2 -translate-x-1/2 z-50 pointer-events-none"
+            className={`absolute left-1/2 -translate-x-1/2 z-50 pointer-events-none ${
+              previewBelow ? "top-full mt-4" : "bottom-full mb-4"
+            }`}
           >
             <div className="card-warm p-3 shadow-xl min-w-[180px]">
               {/* Book cover */}
@@ -205,7 +245,13 @@ export default function BookSpine({ book, index, onClick }: BookSpineProps) {
               )}
 
               {/* Arrow */}
-              <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-warm-50 border-r border-b border-warm-200 rotate-45" />
+              <div
+                className={`absolute left-1/2 -translate-x-1/2 w-4 h-4 bg-warm-50 border-warm-200 rotate-45 ${
+                  previewBelow
+                    ? "-top-2 border-l border-t"
+                    : "-bottom-2 border-r border-b"
+                }`}
+              />
             </div>
           </motion.div>
         )}
