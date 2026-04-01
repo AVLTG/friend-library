@@ -70,7 +70,7 @@ export default function Bookshelf({ books }: BookshelfProps) {
             ${FRAME_DARK} 100%)`,
           boxShadow: `0 4px 8px rgba(20, 15, 10, 0.4)`,
           backgroundImage: woodGrainBg,
-          backgroundBlendMode: "overlay",
+          backgroundBlendMode: "multiply",
         }}
       >
         <div className="absolute top-0 left-0 right-0 h-[1px] bg-white/8" />
