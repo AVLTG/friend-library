@@ -2,53 +2,45 @@
 
 interface ShelfProps {
   children: React.ReactNode;
-  shelfIndex: number;
-  isEmpty?: boolean;
 }
 
-export default function Shelf({ children, isEmpty }: ShelfProps) {
+export default function Shelf({ children }: ShelfProps) {
   return (
     <div className="relative">
       {/* Books container */}
-      <div className="relative flex items-end gap-[2px] px-4 pb-0 h-[220px] pt-4">
+      <div className="relative flex items-end gap-[2px] px-2 pb-0 h-[210px] pt-4">
         {children}
-        {isEmpty && (
-          <div className="flex items-center justify-center w-full h-full text-warm-400/50 text-sm italic font-serif select-none">
-            &nbsp;
-          </div>
-        )}
       </div>
 
       {/* Shelf plank */}
       <div
-        className="relative h-4"
+        className="relative h-[14px]"
         style={{
           background: `linear-gradient(180deg,
-            #B8885A 0%,
-            #A67B5B 30%,
-            #8B6543 70%,
-            #6B4F36 100%)`,
+            #4A3A28 0%,
+            #3E3020 40%,
+            #322B22 100%)`,
           boxShadow: `
-            0 4px 8px -2px rgba(74, 55, 40, 0.3),
-            inset 0 1px 0 rgba(255, 255, 255, 0.15)`,
+            0 3px 6px -1px rgba(30, 22, 15, 0.4),
+            inset 0 1px 0 rgba(255, 255, 255, 0.08)`,
         }}
       >
         {/* Wood grain */}
         <div
-          className="absolute inset-0 opacity-30"
+          className="absolute inset-0 opacity-40"
           style={{
             backgroundImage: `repeating-linear-gradient(
               90deg,
               transparent,
-              transparent 30px,
-              rgba(0,0,0,0.04) 30px,
-              rgba(0,0,0,0.04) 31px
+              transparent 18px,
+              rgba(255,255,255,0.03) 18px,
+              rgba(255,255,255,0.03) 19px
             ), repeating-linear-gradient(
               90deg,
               transparent,
-              transparent 73px,
-              rgba(0,0,0,0.02) 73px,
-              rgba(0,0,0,0.02) 75px
+              transparent 47px,
+              rgba(0,0,0,0.06) 47px,
+              rgba(0,0,0,0.06) 48px
             )`,
           }}
         />
