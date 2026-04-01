@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { books, userBooks, users } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getSession, generateId } from "@/lib/auth";
+import { sanitizeReview, validateRating } from "@/lib/sanitize";
 
 export async function GET(
   _request: Request,
@@ -107,7 +108,9 @@ export async function PATCH(
 
   const { id } = await params;
   const body = await request.json();
-  const { owned, read, currentlyReading, annotated, rating, review } = body;
+  const { owned, read, currentlyReading, annotated } = body;
+  const rating = body.rating !== undefined ? validateRating(body.rating) : undefined;
+  const review = body.review !== undefined ? sanitizeReview(body.review) : undefined;
 
   const book = await db.select().from(books).where(eq(books.id, id)).get();
   if (!book) {

@@ -10,9 +10,17 @@ import {
   validatePassword,
   randomAvatarColor,
 } from "@/lib/auth";
+import { sanitizeName, sanitizeText } from "@/lib/sanitize";
+import { checkRateLimit, getClientIp, AUTH_LIMIT } from "@/lib/rate-limit";
 
 // First-time setup: creates the first admin user (no invite needed)
 export async function POST(request: Request) {
+  const ip = getClientIp(request);
+  const { allowed } = checkRateLimit(ip, AUTH_LIMIT);
+  if (!allowed) {
+    return NextResponse.json({ error: "Too many attempts." }, { status: 429 });
+  }
+
   try {
     const userCount = await db.select({ count: count() }).from(users).get();
 
@@ -23,7 +31,11 @@ export async function POST(request: Request) {
       );
     }
 
-    const { username, firstName, lastName, password } = await request.json();
+    const body = await request.json();
+    const username = sanitizeText(body.username || "", 20);
+    const firstName = sanitizeName(body.firstName || "");
+    const lastName = sanitizeName(body.lastName || "");
+    const password = body.password;
 
     if (!username || !firstName || !lastName || !password) {
       return NextResponse.json(

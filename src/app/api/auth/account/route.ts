@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { getSession, validatePassword, createSession } from "@/lib/auth";
+import { sanitizeName, sanitizeText } from "@/lib/sanitize";
 
 // Get current user info
 export async function GET() {
@@ -39,7 +40,10 @@ export async function PATCH(request: Request) {
   }
 
   const body = await request.json();
-  const { firstName, lastName, username, currentPassword, newPassword } = body;
+  const firstName = body.firstName !== undefined ? sanitizeName(body.firstName) : undefined;
+  const lastName = body.lastName !== undefined ? sanitizeName(body.lastName) : undefined;
+  const username = body.username !== undefined ? sanitizeText(body.username, 20) : undefined;
+  const { currentPassword, newPassword } = body;
 
   const user = await db
     .select()

@@ -9,8 +9,19 @@ import {
   validatePassword,
   randomAvatarColor,
 } from "@/lib/auth";
+import { sanitizeName, sanitizeText } from "@/lib/sanitize";
+import { checkRateLimit, getClientIp, AUTH_LIMIT } from "@/lib/rate-limit";
 
 export async function POST(request: Request) {
+  const ip = getClientIp(request);
+  const { allowed, resetIn } = checkRateLimit(ip, AUTH_LIMIT);
+  if (!allowed) {
+    return NextResponse.json(
+      { error: `Too many attempts. Try again in ${Math.ceil(resetIn / 60000)} minutes.` },
+      { status: 429 }
+    );
+  }
+
   try {
     const { username, firstName, lastName, password, inviteToken } =
       await request.json();
@@ -22,27 +33,36 @@ export async function POST(request: Request) {
       );
     }
 
-    // Validate username
-    if (!/^[a-zA-Z0-9_-]{3,20}$/.test(username)) {
+    const cleanUsername = sanitizeText(username, 20);
+    const cleanFirstName = sanitizeName(firstName);
+    const cleanLastName = sanitizeName(lastName);
+    const cleanToken = sanitizeText(inviteToken, 8).toUpperCase();
+
+    if (!cleanFirstName || !cleanLastName) {
+      return NextResponse.json(
+        { error: "First and last name are required" },
+        { status: 400 }
+      );
+    }
+
+    if (!/^[a-zA-Z0-9_-]{3,20}$/.test(cleanUsername)) {
       return NextResponse.json(
         { error: "Username must be 3-20 characters, letters/numbers/underscores/hyphens only" },
         { status: 400 }
       );
     }
 
-    // Validate password
     const passwordError = validatePassword(password);
     if (passwordError) {
       return NextResponse.json({ error: passwordError }, { status: 400 });
     }
 
-    // Check invite token
     const token = await db
       .select()
       .from(inviteTokens)
       .where(
         and(
-          eq(inviteTokens.token, inviteToken.toUpperCase()),
+          eq(inviteTokens.token, cleanToken),
           isNull(inviteTokens.usedBy)
         )
       )
@@ -62,11 +82,10 @@ export async function POST(request: Request) {
       );
     }
 
-    // Check if username taken
     const existing = await db
       .select()
       .from(users)
-      .where(eq(users.username, username.toLowerCase()))
+      .where(eq(users.username, cleanUsername.toLowerCase()))
       .get();
 
     if (existing) {
@@ -76,29 +95,26 @@ export async function POST(request: Request) {
       );
     }
 
-    // Create user
     const userId = generateId();
     const passwordHash = await bcrypt.hash(password, 12);
 
     await db.insert(users).values({
       id: userId,
-      username: username.toLowerCase(),
-      firstName,
-      lastName,
+      username: cleanUsername.toLowerCase(),
+      firstName: cleanFirstName,
+      lastName: cleanLastName,
       passwordHash,
       avatarColor: randomAvatarColor(),
     });
 
-    // Mark invite token as used
     await db
       .update(inviteTokens)
       .set({ usedBy: userId, usedAt: new Date() })
       .where(eq(inviteTokens.id, token.id));
 
-    // Create session
     const sessionToken = await createSession({
       userId,
-      username: username.toLowerCase(),
+      username: cleanUsername.toLowerCase(),
     });
 
     const response = NextResponse.json({ success: true });
@@ -106,7 +122,7 @@ export async function POST(request: Request) {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 30, // 30 days
+      maxAge: 60 * 60 * 24 * 30,
       path: "/",
     });
 

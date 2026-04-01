@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { inviteTokens } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { getSession, generateId, generateInviteToken } from "@/lib/auth";
+import { checkRateLimit, getClientIp, INVITE_LIMIT } from "@/lib/rate-limit";
 
 export async function GET() {
   const session = await getSession();
@@ -19,10 +20,19 @@ export async function GET() {
   return NextResponse.json(tokens);
 }
 
-export async function POST() {
+export async function POST(request: Request) {
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const ip = getClientIp(request);
+  const { allowed } = checkRateLimit(ip, INVITE_LIMIT);
+  if (!allowed) {
+    return NextResponse.json(
+      { error: "Too many invites generated. Try again later." },
+      { status: 429 }
+    );
   }
 
   const token = generateInviteToken();

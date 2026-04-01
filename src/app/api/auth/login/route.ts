@@ -4,8 +4,19 @@ import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { createSession } from "@/lib/auth";
+import { sanitizeText } from "@/lib/sanitize";
+import { checkRateLimit, getClientIp, AUTH_LIMIT } from "@/lib/rate-limit";
 
 export async function POST(request: Request) {
+  const ip = getClientIp(request);
+  const { allowed, resetIn } = checkRateLimit(ip, AUTH_LIMIT);
+  if (!allowed) {
+    return NextResponse.json(
+      { error: `Too many login attempts. Try again in ${Math.ceil(resetIn / 60000)} minutes.` },
+      { status: 429 }
+    );
+  }
+
   try {
     const { username, password } = await request.json();
 
@@ -16,10 +27,12 @@ export async function POST(request: Request) {
       );
     }
 
+    const cleanUsername = sanitizeText(username, 20).toLowerCase();
+
     const user = await db
       .select()
       .from(users)
-      .where(eq(users.username, username.toLowerCase()))
+      .where(eq(users.username, cleanUsername))
       .get();
 
     if (!user) {

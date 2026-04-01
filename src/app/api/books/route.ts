@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { books, userBooks, users } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { getSession, generateId, randomSpineColor } from "@/lib/auth";
+import { sanitizeText } from "@/lib/sanitize";
 
 export async function GET() {
   const session = await getSession();
@@ -96,9 +97,21 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { title, authors, isbn, description, coverUrl, pageCount, publishedDate, categories, googleBooksId } = body;
+    const title = body.title ? sanitizeText(body.title, 500) : "";
+    const authors: string[] = Array.isArray(body.authors)
+      ? body.authors.map((a: string) => sanitizeText(a, 200)).filter(Boolean)
+      : [];
+    const isbn = body.isbn ? sanitizeText(body.isbn, 20) : undefined;
+    const description = body.description ? sanitizeText(body.description, 5000) : undefined;
+    const coverUrl = body.coverUrl ? sanitizeText(body.coverUrl, 1000) : undefined;
+    const pageCount = body.pageCount ? Math.max(0, Math.min(99999, Number(body.pageCount) || 0)) || undefined : undefined;
+    const publishedDate = body.publishedDate ? sanitizeText(body.publishedDate, 20) : undefined;
+    const categories: string[] | undefined = Array.isArray(body.categories)
+      ? body.categories.map((c: string) => sanitizeText(c, 100)).filter(Boolean)
+      : undefined;
+    const googleBooksId = body.googleBooksId ? sanitizeText(body.googleBooksId, 50) : undefined;
 
-    if (!title || !authors || authors.length === 0) {
+    if (!title || authors.length === 0) {
       return NextResponse.json(
         { error: "Title and at least one author are required" },
         { status: 400 }
