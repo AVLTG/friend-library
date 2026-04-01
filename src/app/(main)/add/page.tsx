@@ -50,12 +50,11 @@ function titleSimilar(a: string, b: string): boolean {
   if (!na || !nb) return false;
   // Exact match after normalization
   if (na === nb) return true;
-  // One contains the other
-  if (na.includes(nb) || nb.includes(na)) return true;
-  // Check if 85%+ characters overlap (simple similarity)
+  // Titles must be similar length (within 20%) to be considered the same book
   const longer = na.length > nb.length ? na : nb;
   const shorter = na.length > nb.length ? nb : na;
-  if (shorter.length / longer.length < 0.7) return false;
+  if (shorter.length / longer.length < 0.8) return false;
+  // Levenshtein-style: count character overlap, require 90%+
   let matches = 0;
   const longerArr = [...longer];
   for (const ch of shorter) {
@@ -65,7 +64,7 @@ function titleSimilar(a: string, b: string): boolean {
       longerArr.splice(idx, 1);
     }
   }
-  return matches / longer.length > 0.85;
+  return matches / longer.length > 0.9;
 }
 
 function isExistingMatch(result: SearchResult, existing: ExistingBook): boolean {
