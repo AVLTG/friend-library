@@ -17,9 +17,9 @@ export default function Shelf({ children }: ShelfProps) {
         className="relative h-[14px]"
         style={{
           background: `linear-gradient(180deg,
-            #4A3A28 0%,
-            #3E3020 40%,
-            #322B22 100%)`,
+            #5A4735 0%,
+            #4A3728 40%,
+            #3D2E20 100%)`,
           boxShadow: `
             0 3px 6px -1px rgba(30, 22, 15, 0.4),
             inset 0 1px 0 rgba(255, 255, 255, 0.08)`,

@@ -10,7 +10,14 @@ import BookSpine, { type BookData } from "./BookSpine";
 const SHELF_HEIGHT = 224;
 const EXTRA_EMPTY_SHELVES = 2;
 
-// Wood grain SVG as inline data URI for border texture
+// Nav bar / border color
+const FRAME_COLOR = "#4A3728";
+const FRAME_LIGHT = "#5A4735";
+const FRAME_DARK = "#3D2E20";
+const FRAME_DARKEST = "#2E2218";
+const BACK_COLOR = "#664731";
+
+// Wood grain SVG texture
 const woodGrainBg = `url("data:image/svg+xml,%3Csvg width='100' height='400' xmlns='http://www.w3.org/2000/svg'%3E%3Cdefs%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.03 0.15' numOctaves='4' seed='2'/%3E%3C/filter%3E%3C/defs%3E%3Crect width='100' height='400' filter='url(%23n)' opacity='0.12'/%3E%3C/svg%3E")`;
 
 interface BookshelfProps {
@@ -27,9 +34,7 @@ export default function Bookshelf({ books }: BookshelfProps) {
     if (!shelvesRef.current) return;
     const observer = new ResizeObserver((entries) => {
       const width = entries[0].contentRect.width;
-      // Available width minus shelf padding (px-2 = 8px each side)
       const available = width - 16;
-      // Average spine width ~42px (range 28-55) plus 2px gap
       const avgSlot = 44;
       setBooksPerShelf(Math.max(5, Math.floor(available / avgSlot)));
     });
@@ -46,28 +51,28 @@ export default function Bookshelf({ books }: BookshelfProps) {
     return result;
   }, [books, booksPerShelf]);
 
-  // Content shelves + 2 empty + half of next empty visible
+  // Content shelves + 2 empty + 1 for the half-visible peek
   const contentShelfCount = shelves.filter((s) => s.length > 0).length;
   const totalRenderedShelves = contentShelfCount + EXTRA_EMPTY_SHELVES + 1;
 
-  // Pad shelves array with empty rows
   while (shelves.length < totalRenderedShelves) {
     shelves.push([]);
   }
 
-  // Max visible height: content shelves + 2 full empty + half of next
-  // Plus top bar (32px) + bottom base (24px)
-  const maxVisibleHeight =
-    32 + (contentShelfCount + EXTRA_EMPTY_SHELVES + 0.5) * SHELF_HEIGHT + 24;
+  // Height that shows: content + 2 empty + half of next, plus frame
+  const innerHeight =
+    (contentShelfCount + EXTRA_EMPTY_SHELVES + 0.5) * SHELF_HEIGHT;
+  const totalHeight = 32 + innerHeight + 24;
 
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.5 }}
-      className="relative overflow-hidden rounded-lg"
+      className="relative rounded-t-lg"
       style={{
-        maxHeight: maxVisibleHeight,
+        height: totalHeight,
+        overflow: "hidden",
         boxShadow: `
           0 10px 40px rgba(20, 15, 10, 0.4),
           0 2px 10px rgba(20, 15, 10, 0.2)`,
@@ -78,34 +83,27 @@ export default function Bookshelf({ books }: BookshelfProps) {
         className="absolute inset-0"
         style={{
           background: `linear-gradient(180deg,
-            #5F4E38 0%,
-            #55452F 30%,
-            #4D3F2A 60%,
-            #463924 100%)`,
+            ${BACK_COLOR} 0%,
+            #5C3F2B 50%,
+            #543A26 100%)`,
         }}
       >
         {/* Back panel wood texture */}
         <div
-          className="absolute inset-0 opacity-30"
+          className="absolute inset-0 opacity-25"
           style={{
             backgroundImage: `repeating-linear-gradient(
               0deg,
               transparent,
               transparent 80px,
-              rgba(0,0,0,0.05) 80px,
-              rgba(0,0,0,0.05) 81px
+              rgba(0,0,0,0.04) 80px,
+              rgba(0,0,0,0.04) 81px
             ), repeating-linear-gradient(
               90deg,
               transparent,
               transparent 160px,
               rgba(0,0,0,0.03) 160px,
               rgba(0,0,0,0.03) 162px
-            ), repeating-linear-gradient(
-              0deg,
-              transparent,
-              transparent 200px,
-              rgba(255,255,255,0.02) 200px,
-              rgba(255,255,255,0.02) 203px
             )`,
           }}
         />
@@ -116,59 +114,53 @@ export default function Bookshelf({ books }: BookshelfProps) {
         className="relative h-8 z-10"
         style={{
           background: `linear-gradient(180deg,
-            #3E3020 0%,
-            #322B22 50%,
-            #2A231A 100%)`,
+            ${FRAME_LIGHT} 0%,
+            ${FRAME_COLOR} 50%,
+            ${FRAME_DARK} 100%)`,
           boxShadow: `0 4px 8px rgba(20, 15, 10, 0.4)`,
           backgroundImage: woodGrainBg,
           backgroundBlendMode: "overlay",
         }}
       >
-        {/* Top highlight */}
-        <div className="absolute top-0 left-0 right-0 h-[1px] bg-[#5A4A38]/60" />
-        {/* Decorative groove */}
-        <div className="absolute bottom-2 left-2 right-2 h-[1px] bg-[#1A150F]/30" />
-        <div className="absolute bottom-[7px] left-2 right-2 h-[1px] bg-[#5A4A38]/20" />
+        <div className="absolute top-0 left-0 right-0 h-[1px] bg-white/8" />
+        <div className="absolute bottom-2 left-2 right-2 h-[1px] bg-black/15" />
+        <div className="absolute bottom-[7px] left-2 right-2 h-[1px] bg-white/5" />
       </div>
 
       {/* Left side panel */}
       <div
-        className="absolute left-0 top-8 bottom-6 w-7 z-10"
+        className="absolute left-0 top-8 bottom-0 w-7 z-10"
         style={{
           background: `linear-gradient(90deg,
-            #2A231A 0%,
-            #322B22 30%,
-            #3E3020 70%,
-            #4A3A28 100%)`,
+            ${FRAME_DARKEST} 0%,
+            ${FRAME_DARK} 25%,
+            ${FRAME_COLOR} 60%,
+            ${FRAME_LIGHT} 100%)`,
           backgroundImage: woodGrainBg,
           backgroundBlendMode: "overlay",
-          boxShadow: `inset -3px 0 8px rgba(0,0,0,0.2)`,
+          boxShadow: `inset -3px 0 8px rgba(0,0,0,0.15)`,
         }}
       >
-        {/* Inner edge highlight */}
-        <div className="absolute top-0 bottom-0 right-0 w-[1px] bg-[#5A4A38]/20" />
-        {/* Outer edge shadow */}
-        <div className="absolute top-0 bottom-0 left-0 w-[1px] bg-[#1A150F]/40" />
+        <div className="absolute top-0 bottom-0 right-0 w-[1px] bg-white/5" />
+        <div className="absolute top-0 bottom-0 left-0 w-[1px] bg-black/20" />
       </div>
 
       {/* Right side panel */}
       <div
-        className="absolute right-0 top-8 bottom-6 w-7 z-10"
+        className="absolute right-0 top-8 bottom-0 w-7 z-10"
         style={{
           background: `linear-gradient(90deg,
-            #4A3A28 0%,
-            #3E3020 30%,
-            #322B22 70%,
-            #2A231A 100%)`,
+            ${FRAME_LIGHT} 0%,
+            ${FRAME_COLOR} 40%,
+            ${FRAME_DARK} 75%,
+            ${FRAME_DARKEST} 100%)`,
           backgroundImage: woodGrainBg,
           backgroundBlendMode: "overlay",
-          boxShadow: `inset 3px 0 8px rgba(0,0,0,0.2)`,
+          boxShadow: `inset 3px 0 8px rgba(0,0,0,0.15)`,
         }}
       >
-        {/* Inner edge highlight */}
-        <div className="absolute top-0 bottom-0 left-0 w-[1px] bg-[#5A4A38]/20" />
-        {/* Outer edge shadow */}
-        <div className="absolute top-0 bottom-0 right-0 w-[1px] bg-[#1A150F]/40" />
+        <div className="absolute top-0 bottom-0 left-0 w-[1px] bg-white/5" />
+        <div className="absolute top-0 bottom-0 right-0 w-[1px] bg-black/20" />
       </div>
 
       {/* Shelves */}
@@ -185,22 +177,6 @@ export default function Bookshelf({ books }: BookshelfProps) {
             ))}
           </Shelf>
         ))}
-      </div>
-
-      {/* Bottom base */}
-      <div
-        className="relative h-6 z-10"
-        style={{
-          background: `linear-gradient(180deg,
-            #3E3020 0%,
-            #322B22 40%,
-            #2A231A 100%)`,
-          boxShadow: `0 6px 16px rgba(20, 15, 10, 0.5)`,
-          backgroundImage: woodGrainBg,
-          backgroundBlendMode: "overlay",
-        }}
-      >
-        <div className="absolute top-0 left-0 right-0 h-[1px] bg-[#5A4A38]/30" />
       </div>
     </motion.div>
   );

@@ -130,7 +130,7 @@ export default function LibraryPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-8 pb-0">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>

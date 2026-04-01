@@ -104,7 +104,7 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-8 pb-0">
       <div className="mb-8">
         <h1 className="font-serif text-3xl font-bold text-warm-900 mb-1">
           My Library
