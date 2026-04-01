@@ -15,8 +15,6 @@ const FRAME_COLOR = "#4A3728";
 const FRAME_LIGHT = "#5A4735";
 const FRAME_DARK = "#3D2E20";
 const FRAME_DARKEST = "#2E2218";
-const BACK_COLOR = "#664731";
-
 // Wood grain SVG texture
 const woodGrainBg = `url("data:image/svg+xml,%3Csvg width='100' height='400' xmlns='http://www.w3.org/2000/svg'%3E%3Cdefs%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.03 0.15' numOctaves='4' seed='2'/%3E%3C/filter%3E%3C/defs%3E%3Crect width='100' height='400' filter='url(%23n)' opacity='0.12'/%3E%3C/svg%3E")`;
 
@@ -78,36 +76,7 @@ export default function Bookshelf({ books }: BookshelfProps) {
           0 2px 10px rgba(20, 15, 10, 0.2)`,
       }}
     >
-      {/* Back panel */}
-      <div
-        className="absolute inset-0"
-        style={{
-          background: `linear-gradient(180deg,
-            ${BACK_COLOR} 0%,
-            #5C3F2B 50%,
-            #543A26 100%)`,
-        }}
-      >
-        {/* Back panel wood texture */}
-        <div
-          className="absolute inset-0 opacity-25"
-          style={{
-            backgroundImage: `repeating-linear-gradient(
-              0deg,
-              transparent,
-              transparent 80px,
-              rgba(0,0,0,0.04) 80px,
-              rgba(0,0,0,0.04) 81px
-            ), repeating-linear-gradient(
-              90deg,
-              transparent,
-              transparent 160px,
-              rgba(0,0,0,0.03) 160px,
-              rgba(0,0,0,0.03) 162px
-            )`,
-          }}
-        />
-      </div>
+      {/* No back panel — page background shows through */}
 
       {/* Top molding */}
       <div
