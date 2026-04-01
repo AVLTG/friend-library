@@ -67,28 +67,45 @@ function WoodPanel({
   );
 }
 
+// Same formula as BookSpine uses for width
+function getSpineWidth(book: BookData): number {
+  return Math.max(28, Math.min(55, (book.pageCount || 200) / 8));
+}
+
 export default function Bookshelf({ books }: BookshelfProps) {
   const router = useRouter();
   const shelvesRef = useRef<HTMLDivElement>(null);
-  const [booksPerShelf, setBooksPerShelf] = useState(20);
+  const [shelfWidth, setShelfWidth] = useState(800);
 
   useEffect(() => {
     if (!shelvesRef.current) return;
     const observer = new ResizeObserver((entries) => {
       const width = entries[0].contentRect.width;
-      const available = width - 16;
-      const avgSlot = 44;
-      setBooksPerShelf(Math.max(5, Math.floor(available / avgSlot)));
+      // Available width minus shelf inner padding (px-2 = 8px each side)
+      setShelfWidth(width - 16);
     });
     observer.observe(shelvesRef.current);
     return () => observer.disconnect();
   }, []);
 
+  // Split books into shelves based on actual cumulative spine widths
   const shelves = useMemo(() => {
     const result: BookData[][] = [];
-    for (let i = 0; i < books.length; i += booksPerShelf) {
-      result.push(books.slice(i, i + booksPerShelf));
+    let currentShelf: BookData[] = [];
+    let currentWidth = 0;
+    const gap = 2; // gap-[2px] between spines
+
+    for (const book of books) {
+      const w = getSpineWidth(book) + gap;
+      if (currentWidth + w > shelfWidth && currentShelf.length > 0) {
+        result.push(currentShelf);
+        currentShelf = [];
+        currentWidth = 0;
+      }
+      currentShelf.push(book);
+      currentWidth += w;
     }
+    if (currentShelf.length > 0) result.push(currentShelf);
     if (result.length === 0) result.push([]);
 
     for (let i = 0; i < EXTRA_EMPTY_SHELVES; i++) {
@@ -96,7 +113,7 @@ export default function Bookshelf({ books }: BookshelfProps) {
     }
 
     return result;
-  }, [books, booksPerShelf]);
+  }, [books, shelfWidth]);
 
   return (
     <motion.div
