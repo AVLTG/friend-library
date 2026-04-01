@@ -388,7 +388,7 @@ export default function AddBookPage() {
                       </span>
                       <div className="flex-1 h-[1px] bg-warm-200" />
                     </div>
-                    <div className="space-y-2 mb-4">
+                    <div className="space-y-2">
                       {matchedResults.map((book, i) => (
                         <motion.button
                           key={`match-${book.id}`}
@@ -415,6 +415,10 @@ export default function AddBookPage() {
                           <ArrowRight className="w-4 h-4 text-warm-400 flex-shrink-0" />
                         </motion.button>
                       ))}
+                    </div>
+                    {/* Closing divider */}
+                    <div className="flex items-center gap-2 mt-3 mb-4 px-1">
+                      <div className="flex-1 h-[1px] bg-warm-200" />
                     </div>
                   </>
                 )}
