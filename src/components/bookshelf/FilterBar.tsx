@@ -112,6 +112,7 @@ export default function FilterBar({
                   className="bg-cream border border-warm-200 rounded-lg px-3 py-1.5 text-sm text-warm-700 focus:outline-none focus:ring-2 focus:ring-warm-400"
                 >
                   <option value="">Anyone</option>
+                  <option value="__any">At least 1 person</option>
                   {owners.map((owner) => (
                     <option key={owner.id} value={owner.id}>
                       {owner.firstName}
@@ -154,6 +155,7 @@ export default function FilterBar({
                   className="bg-cream border border-warm-200 rounded-lg px-3 py-1.5 text-sm text-warm-700 focus:outline-none focus:ring-2 focus:ring-warm-400"
                 >
                   <option value="">Anyone</option>
+                  <option value="__any">At least 1 person</option>
                   {owners.map((owner) => (
                     <option key={owner.id} value={owner.id}>
                       {owner.firstName}
@@ -174,6 +176,7 @@ export default function FilterBar({
                   className="bg-cream border border-warm-200 rounded-lg px-3 py-1.5 text-sm text-warm-700 focus:outline-none focus:ring-2 focus:ring-warm-400"
                 >
                   <option value="">Anyone</option>
+                  <option value="__any">At least 1 person</option>
                   {owners.map((owner) => (
                     <option key={owner.id} value={owner.id}>
                       {owner.firstName}

@@ -101,9 +101,13 @@ export default function LibraryPage() {
     }
 
     if (filterOwner) {
-      result = result.filter((b) =>
-        b.owners.some((o) => o.id === filterOwner)
-      );
+      if (filterOwner === "__any") {
+        result = result.filter((b) => b.owners.length > 0);
+      } else {
+        result = result.filter((b) =>
+          b.owners.some((o) => o.id === filterOwner)
+        );
+      }
     }
 
     if (filterCategory) {
@@ -113,15 +117,23 @@ export default function LibraryPage() {
     }
 
     if (filterReadBy) {
-      result = result.filter((b) =>
-        b.readers.some((r) => r.id === filterReadBy)
-      );
+      if (filterReadBy === "__any") {
+        result = result.filter((b) => b.readers.length > 0);
+      } else {
+        result = result.filter((b) =>
+          b.readers.some((r) => r.id === filterReadBy)
+        );
+      }
     }
 
     if (filterCurrentlyReading) {
-      result = result.filter((b) =>
-        b.currentlyReading.some((r) => r.id === filterCurrentlyReading)
-      );
+      if (filterCurrentlyReading === "__any") {
+        result = result.filter((b) => b.currentlyReading.length > 0);
+      } else {
+        result = result.filter((b) =>
+          b.currentlyReading.some((r) => r.id === filterCurrentlyReading)
+        );
+      }
     }
 
     // Sort
@@ -148,7 +160,7 @@ export default function LibraryPage() {
     }
 
     return result;
-  }, [books, search, sortBy, filterOwner]);
+  }, [books, search, sortBy, filterOwner, filterCategory, filterReadBy, filterCurrentlyReading]);
 
   if (loading) {
     return (

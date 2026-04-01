@@ -84,24 +84,24 @@ export default function BookSpine({ book, index, onClick }: BookSpineProps) {
         }}
         transition={{ type: "spring", stiffness: 300, damping: 20 }}
       >
-        {/* Cover image — optimized loads fast, then full-res fades in */}
+        {/* Cover image — low-res stays visible, high-res fades in on top */}
         {book.coverUrl ? (
           <>
+            {/* Low-res: always visible as base layer */}
             <Image
               src={book.coverUrl}
               alt=""
               fill
-              className={`object-cover transition-opacity duration-300 ${
-                imageLoaded ? "opacity-0" : "opacity-100"
-              }`}
+              className="object-cover"
               sizes="100px"
               quality={50}
             />
+            {/* High-res: fades in on top when loaded */}
             <Image
               src={book.coverUrl}
               alt=""
               fill
-              className={`object-cover transition-opacity duration-500 ${
+              className={`object-cover transition-opacity duration-700 ${
                 imageLoaded ? "opacity-100" : "opacity-0"
               }`}
               sizes="200px"
