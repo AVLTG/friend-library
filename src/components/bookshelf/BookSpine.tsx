@@ -90,7 +90,8 @@ export default function BookSpine({ book, index, onClick }: BookSpineProps) {
             alt=""
             fill
             className="object-cover"
-            sizes={`${spineWidth}px`}
+            sizes="200px"
+            unoptimized
           />
         ) : null}
 
