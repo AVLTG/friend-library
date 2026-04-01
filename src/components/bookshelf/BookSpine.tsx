@@ -26,6 +26,7 @@ export default function BookSpine({ book, index, onClick }: BookSpineProps) {
   const [isHovered, setIsHovered] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [previewBelow, setPreviewBelow] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
   const hoverTimeout = useRef<ReturnType<typeof setTimeout>>(null);
   const spineRef = useRef<HTMLDivElement>(null);
   const spineWidth = Math.max(28, Math.min(55, (book.pageCount || 200) / 8));
@@ -33,8 +34,6 @@ export default function BookSpine({ book, index, onClick }: BookSpineProps) {
   const checkPosition = useCallback(() => {
     if (!spineRef.current) return;
     const rect = spineRef.current.getBoundingClientRect();
-    // If the top of the spine is less than 320px from viewport top,
-    // show preview below instead of above
     setPreviewBelow(rect.top < 320);
   }, []);
 
@@ -83,16 +82,33 @@ export default function BookSpine({ book, index, onClick }: BookSpineProps) {
         }}
         transition={{ type: "spring", stiffness: 300, damping: 20 }}
       >
-        {/* Cover image as spine background */}
+        {/* Cover image — optimized loads fast, then full-res fades in */}
         {book.coverUrl ? (
-          <Image
-            src={book.coverUrl}
-            alt=""
-            fill
-            className="object-cover"
-            sizes="200px"
-            unoptimized
-          />
+          <>
+            {/* Fast optimized version (shows immediately) */}
+            <Image
+              src={book.coverUrl}
+              alt=""
+              fill
+              className={`object-cover transition-opacity duration-300 ${
+                imageLoaded ? "opacity-0" : "opacity-100"
+              }`}
+              sizes="100px"
+              quality={50}
+            />
+            {/* Full-res version (fades in when loaded) */}
+            <Image
+              src={book.coverUrl}
+              alt=""
+              fill
+              className={`object-cover transition-opacity duration-500 ${
+                imageLoaded ? "opacity-100" : "opacity-0"
+              }`}
+              sizes="200px"
+              unoptimized
+              onLoad={() => setImageLoaded(true)}
+            />
+          </>
         ) : null}
 
         {/* Spine texture/gradient overlay */}
@@ -181,7 +197,6 @@ export default function BookSpine({ book, index, onClick }: BookSpineProps) {
             }`}
           >
             <div className="card-warm p-3 shadow-xl min-w-[180px]">
-              {/* Book cover */}
               {book.coverUrl ? (
                 <div className="relative w-[120px] h-[180px] mx-auto mb-3 rounded-md overflow-hidden shadow-md">
                   <Image
@@ -206,7 +221,6 @@ export default function BookSpine({ book, index, onClick }: BookSpineProps) {
                 </div>
               )}
 
-              {/* Book info */}
               <h3 className="font-serif font-bold text-sm text-warm-900 text-center leading-tight">
                 {book.title}
               </h3>
@@ -214,7 +228,6 @@ export default function BookSpine({ book, index, onClick }: BookSpineProps) {
                 {book.authors.join(", ")}
               </p>
 
-              {/* Rating */}
               {book.averageRating && (
                 <div className="flex items-center justify-center gap-1 mt-2">
                   <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
@@ -224,7 +237,6 @@ export default function BookSpine({ book, index, onClick }: BookSpineProps) {
                 </div>
               )}
 
-              {/* Owner avatars */}
               {book.owners.length > 0 && (
                 <div className="flex items-center justify-center gap-1 mt-2">
                   {book.owners.slice(0, 4).map((owner) => (
@@ -245,7 +257,6 @@ export default function BookSpine({ book, index, onClick }: BookSpineProps) {
                 </div>
               )}
 
-              {/* Arrow */}
               <div
                 className={`absolute left-1/2 -translate-x-1/2 w-4 h-4 bg-warm-50 border-warm-200 rotate-45 ${
                   previewBelow
