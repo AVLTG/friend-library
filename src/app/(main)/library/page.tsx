@@ -15,6 +15,7 @@ interface BookWithDetails extends BookData {
   categories: string[];
   readers: Array<{ id: string; firstName: string; avatarColor: string }>;
   annotators: Array<{ id: string; firstName: string; avatarColor: string }>;
+  currentlyReading: Array<{ id: string; firstName: string; avatarColor: string }>;
   ratings: Array<{
     userId: string;
     firstName: string;
@@ -24,6 +25,13 @@ interface BookWithDetails extends BookData {
     review?: string;
   }>;
   createdAt: string;
+  currentUserBook: {
+    owned: boolean;
+    read: boolean;
+    currentlyReading: boolean;
+    annotated: boolean;
+    rating: number | null;
+  } | null;
 }
 
 export default function LibraryPage() {
@@ -32,6 +40,9 @@ export default function LibraryPage() {
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("title");
   const [filterOwner, setFilterOwner] = useState("");
+  const [filterCategory, setFilterCategory] = useState("");
+  const [filterReadBy, setFilterReadBy] = useState("");
+  const [filterCurrentlyReading, setFilterCurrentlyReading] = useState("");
 
   useEffect(() => {
     fetchBooks();
@@ -67,11 +78,19 @@ export default function LibraryPage() {
     return Array.from(ownerMap.values());
   }, [books]);
 
+  // Get unique categories across all books
+  const allCategories = useMemo(() => {
+    const cats = new Set<string>();
+    books.forEach((book) => {
+      book.categories?.forEach((c) => cats.add(c));
+    });
+    return Array.from(cats).sort();
+  }, [books]);
+
   // Filter and sort
   const filteredBooks = useMemo(() => {
     let result = [...books];
 
-    // Search filter
     if (search) {
       const q = search.toLowerCase();
       result = result.filter(
@@ -81,10 +100,27 @@ export default function LibraryPage() {
       );
     }
 
-    // Owner filter
     if (filterOwner) {
       result = result.filter((b) =>
         b.owners.some((o) => o.id === filterOwner)
+      );
+    }
+
+    if (filterCategory) {
+      result = result.filter((b) =>
+        b.categories?.includes(filterCategory)
+      );
+    }
+
+    if (filterReadBy) {
+      result = result.filter((b) =>
+        b.readers.some((r) => r.id === filterReadBy)
+      );
+    }
+
+    if (filterCurrentlyReading) {
+      result = result.filter((b) =>
+        b.currentlyReading.some((r) => r.id === filterCurrentlyReading)
       );
     }
 
@@ -159,7 +195,14 @@ export default function LibraryPage() {
           onSortChange={setSortBy}
           filterOwner={filterOwner}
           onFilterOwnerChange={setFilterOwner}
+          filterCategory={filterCategory}
+          onFilterCategoryChange={setFilterCategory}
+          filterReadBy={filterReadBy}
+          onFilterReadByChange={setFilterReadBy}
+          filterCurrentlyReading={filterCurrentlyReading}
+          onFilterCurrentlyReadingChange={setFilterCurrentlyReading}
           owners={allOwners}
+          categories={allCategories}
         />
       </div>
 

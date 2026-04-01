@@ -56,6 +56,7 @@ export const userBooks = sqliteTable("user_books", {
     .references(() => books.id),
   owned: integer("owned", { mode: "boolean" }).notNull().default(false),
   read: integer("read", { mode: "boolean" }).notNull().default(false),
+  currentlyReading: integer("currently_reading", { mode: "boolean" }).notNull().default(false),
   annotated: integer("annotated", { mode: "boolean" }).notNull().default(false),
   rating: real("rating"), // 0.5 - 5 in 0.5 increments
   review: text("review"),

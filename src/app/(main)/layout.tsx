@@ -13,10 +13,12 @@ import {
   User,
   Menu,
   X,
+  BookMarked,
 } from "lucide-react";
 
 const navItems = [
   { href: "/library", label: "Shared Library", icon: Library },
+  { href: "/reading", label: "Reading Now", icon: BookMarked },
   { href: "/add", label: "Add Book", icon: Plus },
   { href: "/settings", label: "Settings", icon: Settings },
 ];

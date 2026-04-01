@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
-import { BookOpen, Eye, PenLine, Star } from "lucide-react";
+import { BookOpen, Eye, PenLine, Star, BookMarked } from "lucide-react";
 import Bookshelf from "@/components/bookshelf/Bookshelf";
 import type { BookData } from "@/components/bookshelf/BookSpine";
 
@@ -13,17 +13,18 @@ interface BookWithDetails extends BookData {
   currentUserBook: {
     owned: boolean;
     read: boolean;
+    currentlyReading: boolean;
     annotated: boolean;
     rating: number | null;
   } | null;
 }
 
+type TabKey = "owned" | "currentlyReading" | "read" | "annotated";
+
 export default function ProfilePage() {
   const [books, setBooks] = useState<BookWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"owned" | "read" | "annotated">(
-    "owned"
-  );
+  const [activeTab, setActiveTab] = useState<TabKey>("owned");
 
   useEffect(() => {
     fetchBooks();
@@ -49,6 +50,8 @@ export default function ProfilePage() {
       switch (activeTab) {
         case "owned":
           return b.currentUserBook.owned;
+        case "currentlyReading":
+          return b.currentUserBook.currentlyReading;
         case "read":
           return b.currentUserBook.read;
         case "annotated":
@@ -61,27 +64,34 @@ export default function ProfilePage() {
 
   const stats = useMemo(() => {
     const owned = books.filter((b) => b.currentUserBook?.owned).length;
+    const currentlyReading = books.filter((b) => b.currentUserBook?.currentlyReading).length;
     const read = books.filter((b) => b.currentUserBook?.read).length;
     const annotated = books.filter((b) => b.currentUserBook?.annotated).length;
     const rated = books.filter((b) => b.currentUserBook?.rating).length;
-    return { owned, read, annotated, rated };
+    return { owned, currentlyReading, read, annotated, rated };
   }, [books]);
 
   const tabs = [
     {
-      key: "owned" as const,
+      key: "owned" as TabKey,
       label: "My Books",
       icon: BookOpen,
       count: stats.owned,
     },
     {
-      key: "read" as const,
+      key: "currentlyReading" as TabKey,
+      label: "Reading",
+      icon: BookMarked,
+      count: stats.currentlyReading,
+    },
+    {
+      key: "read" as TabKey,
       label: "Read",
       icon: Eye,
       count: stats.read,
     },
     {
-      key: "annotated" as const,
+      key: "annotated" as TabKey,
       label: "Annotated",
       icon: PenLine,
       count: stats.annotated,

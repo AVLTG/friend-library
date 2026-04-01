@@ -53,6 +53,14 @@ export async function GET() {
             firstName: ub.user.firstName,
             avatarColor: ub.user.avatarColor,
           })),
+        currentlyReading: bookUsers
+          .filter((ub) => ub.userBook.currentlyReading)
+          .map((ub) => ({
+            id: ub.user.id,
+            username: ub.user.username,
+            firstName: ub.user.firstName,
+            avatarColor: ub.user.avatarColor,
+          })),
         ratings: bookUsers
           .filter((ub) => ub.userBook.rating !== null)
           .map((ub) => ({

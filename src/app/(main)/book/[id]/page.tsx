@@ -17,6 +17,7 @@ import {
   Check,
   X,
   Trash2,
+  BookMarked,
 } from "lucide-react";
 import StarRating from "@/components/StarRating";
 
@@ -53,6 +54,13 @@ interface BookDetail {
     lastName: string;
     avatarColor: string;
   }>;
+  currentlyReading: Array<{
+    id: string;
+    username: string;
+    firstName: string;
+    lastName: string;
+    avatarColor: string;
+  }>;
   ratings: Array<{
     userId: string;
     username: string;
@@ -66,6 +74,7 @@ interface BookDetail {
   currentUserBook: {
     owned: boolean;
     read: boolean;
+    currentlyReading: boolean;
     annotated: boolean;
     rating: number | null;
     review: string | null;
@@ -110,7 +119,7 @@ export default function BookDetailPage({
     }
   }
 
-  async function toggleStatus(field: "owned" | "read" | "annotated") {
+  async function toggleStatus(field: "owned" | "read" | "currentlyReading" | "annotated") {
     if (!book) return;
     const current = book.currentUserBook?.[field] ?? false;
 
@@ -309,6 +318,12 @@ export default function BookDetailPage({
                 onClick={() => toggleStatus("owned")}
               />
               <StatusButton
+                active={userBook?.currentlyReading ?? false}
+                icon={<BookMarked className="w-4 h-4" />}
+                label="Currently reading"
+                onClick={() => toggleStatus("currentlyReading")}
+              />
+              <StatusButton
                 active={userBook?.read ?? false}
                 icon={<Eye className="w-4 h-4" />}
                 label="I've read this"
@@ -446,11 +461,16 @@ export default function BookDetailPage({
         )}
 
         {/* People sections */}
-        <div className="grid md:grid-cols-3 gap-6 mb-8">
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <PeopleCard
             title="Owned by"
             icon={<BookOpen className="w-4 h-4" />}
             people={book.owners}
+          />
+          <PeopleCard
+            title="Currently reading"
+            icon={<BookMarked className="w-4 h-4" />}
+            people={book.currentlyReading}
           />
           <PeopleCard
             title="Read by"

@@ -62,6 +62,15 @@ export async function GET(
         lastName: ub.user.lastName,
         avatarColor: ub.user.avatarColor,
       })),
+    currentlyReading: bookUsers
+      .filter((ub) => ub.userBook.currentlyReading)
+      .map((ub) => ({
+        id: ub.user.id,
+        username: ub.user.username,
+        firstName: ub.user.firstName,
+        lastName: ub.user.lastName,
+        avatarColor: ub.user.avatarColor,
+      })),
     ratings: bookUsers
       .filter((ub) => ub.userBook.rating !== null)
       .map((ub) => ({
@@ -98,7 +107,7 @@ export async function PATCH(
 
   const { id } = await params;
   const body = await request.json();
-  const { owned, read, annotated, rating, review } = body;
+  const { owned, read, currentlyReading, annotated, rating, review } = body;
 
   const book = await db.select().from(books).where(eq(books.id, id)).get();
   if (!book) {
@@ -122,6 +131,7 @@ export async function PATCH(
       bookId: id,
       owned: owned ?? false,
       read: read ?? false,
+      currentlyReading: currentlyReading ?? false,
       annotated: annotated ?? false,
       rating: rating ?? null,
       review: review ?? null,
@@ -134,10 +144,19 @@ export async function PATCH(
   } else {
     const updates: Record<string, unknown> = { updatedAt: new Date() };
     if (owned !== undefined) updates.owned = owned;
-    if (read !== undefined) updates.read = read;
     if (annotated !== undefined) updates.annotated = annotated;
     if (rating !== undefined) updates.rating = rating;
     if (review !== undefined) updates.review = review;
+
+    // Mutual exclusion: currentlyReading and read can't both be true
+    if (currentlyReading !== undefined) {
+      updates.currentlyReading = currentlyReading;
+      if (currentlyReading) updates.read = false;
+    }
+    if (read !== undefined) {
+      updates.read = read;
+      if (read) updates.currentlyReading = false;
+    }
 
     await db
       .update(userBooks)
