@@ -61,10 +61,20 @@ export async function searchBooks(query: string): Promise<GoogleBookResult[]> {
       (id) => id.type === "ISBN_13" || id.type === "ISBN_10"
     );
 
-    // Get higher quality cover by replacing zoom parameter
+    // Build highest-quality cover URL available
     let coverUrl = info.imageLinks?.thumbnail || info.imageLinks?.smallThumbnail;
     if (coverUrl) {
-      coverUrl = coverUrl.replace("zoom=1", "zoom=2").replace("http://", "https://");
+      // Remove edge curl effect, use max zoom, force https
+      coverUrl = coverUrl
+        .replace("http://", "https://")
+        .replace(/&?edge=curl/g, "")
+        .replace(/zoom=\d/, "zoom=3");
+    }
+
+    // Prefer Open Library cover if ISBN exists (much higher resolution)
+    const isbnValue = isbn?.identifier;
+    if (isbnValue) {
+      coverUrl = `https://covers.openlibrary.org/b/isbn/${isbnValue}-L.jpg`;
     }
 
     return {
@@ -72,7 +82,7 @@ export async function searchBooks(query: string): Promise<GoogleBookResult[]> {
       title: info.title,
       authors: info.authors || ["Unknown Author"],
       description: info.description,
-      isbn: isbn?.identifier,
+      isbn: isbnValue,
       coverUrl,
       pageCount: info.pageCount,
       publishedDate: info.publishedDate,
@@ -102,7 +112,15 @@ export async function getBookById(
 
   let coverUrl = info.imageLinks?.thumbnail || info.imageLinks?.smallThumbnail;
   if (coverUrl) {
-    coverUrl = coverUrl.replace("zoom=1", "zoom=2").replace("http://", "https://");
+    coverUrl = coverUrl
+      .replace("http://", "https://")
+      .replace(/&?edge=curl/g, "")
+      .replace(/zoom=\d/, "zoom=3");
+  }
+
+  const isbnValue = isbn?.identifier;
+  if (isbnValue) {
+    coverUrl = `https://covers.openlibrary.org/b/isbn/${isbnValue}-L.jpg`;
   }
 
   return {
@@ -110,7 +128,7 @@ export async function getBookById(
     title: info.title,
     authors: info.authors || ["Unknown Author"],
     description: info.description,
-    isbn: isbn?.identifier,
+    isbn: isbnValue,
     coverUrl,
     pageCount: info.pageCount,
     publishedDate: info.publishedDate,
