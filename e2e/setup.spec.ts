@@ -332,6 +332,9 @@ test("core routes remain accessible across responsive layouts", async ({ page })
   ).toHaveAttribute("aria-current", "page");
   await page.keyboard.press("Escape");
   await expect(menuButton).toBeFocused();
+  await expect.poll(() =>
+    menuButton.evaluate((element) => getComputedStyle(element).outlineColor),
+  ).toBe("rgb(253, 246, 236)");
 
   const spine = page.getByRole("link", {
     name: "Responsive Accessibility by Keyboard Reader",
@@ -404,9 +407,12 @@ test("core routes remain accessible across responsive layouts", async ({ page })
 
   await page.goto("/add");
   await page.getByRole("button", { name: "Can't find it? Add manually" }).click();
+  await expect(page.getByRole("heading", { name: "Edit Details" })).toBeFocused();
   await expect(page.getByLabel("Title")).toBeVisible();
   await expect(page.getByLabel("Authors (comma separated)")).toBeVisible();
   await expectNoHorizontalOverflow(page);
+  await page.getByRole("button", { name: "Close book details" }).click();
+  await expect(page.getByLabel("Search by title, author, or ISBN")).toBeFocused();
 
   await page.setViewportSize({ width: 768, height: 1024 });
   await page.goto("/library");

@@ -617,7 +617,7 @@ export default function BookDetailPage({
                 {book.categories.map((cat) => (
                   <span
                     key={cat}
-                    className="px-3 py-1 bg-warm-100 text-warm-600 rounded-full text-xs font-medium"
+                    className="px-3 py-1 bg-warm-100 text-warm-700 rounded-full text-xs font-medium"
                   >
                     {cat}
                   </span>
@@ -872,7 +872,7 @@ export default function BookDetailPage({
                 </div>
 
                 {reviewText.trim() && reviewRating === null && (
-                  <p className="mb-3 text-sm text-red-600" role="alert">
+                  <p className="mb-3 text-sm text-red-700" role="alert">
                     Choose a rating before saving a written review.
                   </p>
                 )}

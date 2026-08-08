@@ -154,11 +154,6 @@ export default function AddBookPage() {
     };
   }, []);
 
-  useEffect(() => {
-    if (!selectedBook && !showManual) return;
-    window.requestAnimationFrame(() => formHeadingRef.current?.focus());
-  }, [selectedBook, showManual]);
-
   const { matchedResults, addableResults } = useMemo(() => {
     if (libraryStatus !== "ready") {
       return {
@@ -270,7 +265,6 @@ export default function AddBookPage() {
     setSelectedBook(null);
     setShowManual(false);
     setEditMode(false);
-    window.requestAnimationFrame(() => searchInputRef.current?.focus());
   }
 
   async function handleAddBook(event?: React.FormEvent) {
@@ -353,6 +347,7 @@ export default function AddBookPage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
+            onAnimationComplete={() => formHeadingRef.current?.focus()}
           >
             <form onSubmit={handleAddBook} className="card-warm p-4 sm:p-6 mb-6">
               <div className="flex items-start justify-between mb-4">
@@ -410,7 +405,7 @@ export default function AddBookPage() {
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <div>
                           <label htmlFor="book-isbn" className="block text-xs font-medium text-warm-700 mb-1">ISBN</label>
-                          <input id="book-isbn" type="text" inputMode="numeric" value={editIsbn} onChange={(e) => setEditIsbn(e.target.value)} maxLength={20} className="w-full px-3 py-2 bg-cream border border-warm-500 rounded-lg text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-warm-700" />
+                          <input id="book-isbn" type="text" value={editIsbn} onChange={(e) => setEditIsbn(e.target.value)} maxLength={20} className="w-full px-3 py-2 bg-cream border border-warm-500 rounded-lg text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-warm-700" />
                         </div>
                         <div>
                           <label htmlFor="book-page-count" className="block text-xs font-medium text-warm-700 mb-1">Page Count</label>
@@ -460,6 +455,7 @@ export default function AddBookPage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
+            onAnimationComplete={() => searchInputRef.current?.focus()}
           >
             {/* Search bar */}
             <div className="relative mb-6">

@@ -50,6 +50,12 @@
     outline-color: var(--color-warm-700);
   }
 
+  header a:focus-visible,
+  header button:focus-visible {
+    outline: 2px solid var(--color-cream);
+    outline-offset: 3px;
+  }
+
   ::selection {
     background-color: var(--color-warm-300);
     color: var(--color-warm-900);

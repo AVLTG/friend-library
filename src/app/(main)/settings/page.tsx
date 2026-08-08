@@ -635,7 +635,7 @@ export default function SettingsPage() {
 
                   <div className="flex-1 min-w-0">
                     {isUsed ? (
-                      <div className="flex items-center gap-1.5 text-green-600 text-xs">
+                      <div className="flex items-center gap-1.5 text-green-800 text-xs">
                         <User className="w-3.5 h-3.5" />
                         Used
                       </div>
