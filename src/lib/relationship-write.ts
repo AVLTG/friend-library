@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { generateId } from "./auth";
-import { db } from "./db";
 import { books, userBooks } from "./db/schema";
+import { maintenanceTransaction } from "./db/maintenance-write";
 import { withSqliteBusyRetry } from "./db/transaction";
 import {
   resolveRelationshipState,
@@ -16,7 +16,7 @@ export async function updateRelationship(
   changes: RelationshipChanges,
 ) {
   return withSqliteBusyRetry(() =>
-    db.transaction(async (tx) => {
+    maintenanceTransaction(async (tx) => {
       const book = await tx
         .select({ id: books.id })
         .from(books)

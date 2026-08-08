@@ -52,7 +52,7 @@ After migration, repeat the row-count and foreign-key checks, verify exactly one
 
 Migration `0004_api-correctness` must be applied before deploying code that writes `book_google_ids` or relies on canonical ISBN uniqueness.
 
-Because the pre-`0004` application does not maintain Google alias rows or canonicalize every ISBN write, migration `0004` installs temporary `maintenance_0004_*` triggers that reject user-data writes while leaving reads available. The freeze marker is enabled only when upgrading an existing library, so fresh databases remain writable. Verify the enabled marker and all 11 triggers before merging. After the merged Vercel production deployment is live, drop those triggers and `__migration_0004_maintenance` in one reviewed SQL batch, then immediately run authenticated write smoke tests. Never remove them while the old application is still serving production.
+Because the pre-`0004` application does not maintain Google alias rows or canonicalize every ISBN write, migration `0004` installs permanent `maintenance_0004_*` compatibility triggers that reject old-application user-data writes while leaving reads available. The marker is enabled when upgrading any initialized library and remains enabled after deployment. Phase 5+ writes temporarily clear and restore it inside their own transaction, so old immutable deployments and rollback targets remain blocked without creating a cross-connection write window. Fresh databases start with an empty marker and remain writable. Verify the marker and all 11 triggers before merging; do not drop them during normal rollout or rollback.
 
 Before applying it:
 

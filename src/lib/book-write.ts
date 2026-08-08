@@ -1,8 +1,8 @@
 import { and, eq } from "drizzle-orm";
-import { db } from "./db";
 import { bookGoogleIds, books, userBooks } from "./db/schema";
 import { withSqliteBusyRetry } from "./db/transaction";
 import { isSqliteUniqueConstraint } from "./db/errors";
+import { maintenanceTransaction } from "./db/maintenance-write";
 
 export class BookIdentityConflictError extends Error {
   constructor() {
@@ -33,7 +33,7 @@ export async function createBookWithOwner(
   owner: typeof userBooks.$inferInsert,
 ): Promise<void> {
   await withSqliteBusyRetry(() =>
-    db.transaction(async (tx) => {
+    maintenanceTransaction(async (tx) => {
       await tx.insert(books).values(book);
       await tx.insert(userBooks).values(owner);
     }),
@@ -46,7 +46,7 @@ export async function createOrAttachBook(
 ): Promise<CreateOrAttachBookResult> {
   return serializeBookWrite(async () => {
     const operation = () =>
-      db.transaction(async (tx) => {
+      maintenanceTransaction(async (tx) => {
       const googleMatch = book.googleBooksId
         ? await tx
             .select({

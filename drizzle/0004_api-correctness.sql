@@ -113,7 +113,7 @@ CREATE TABLE `__migration_0004_maintenance` (
 	`enabled` integer NOT NULL CHECK (`enabled` = 1)
 );--> statement-breakpoint
 INSERT INTO `__migration_0004_maintenance` (`enabled`)
-SELECT 1 WHERE EXISTS (SELECT 1 FROM `books`);--> statement-breakpoint
+SELECT 1 WHERE EXISTS (SELECT 1 FROM `users`);--> statement-breakpoint
 CREATE TRIGGER `maintenance_0004_books_insert` BEFORE INSERT ON `books`
 WHEN EXISTS (SELECT 1 FROM `__migration_0004_maintenance` WHERE `enabled` = 1)
 BEGIN SELECT RAISE(ABORT, 'BookShare maintenance'); END;--> statement-breakpoint

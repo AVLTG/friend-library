@@ -1,5 +1,5 @@
 import { generateId, generateInviteToken } from "./auth";
-import { db } from "./db";
+import { maintenanceTransaction } from "./db/maintenance-write";
 import { inviteTokens } from "./db/schema";
 import { withSqliteBusyRetry } from "./db/transaction";
 
@@ -35,12 +35,14 @@ export async function createInviteForUser(
     const token = generateToken();
     try {
       await withSqliteBusyRetry(() =>
-        db.insert(inviteTokens).values({
-          id: generateId(),
-          token,
-          createdBy,
-          expiresAt,
-        }),
+        maintenanceTransaction((tx) =>
+          tx.insert(inviteTokens).values({
+            id: generateId(),
+            token,
+            createdBy,
+            expiresAt,
+          }),
+        ),
       );
       return { token, expiresAt };
     } catch (error) {

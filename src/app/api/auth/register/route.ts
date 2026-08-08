@@ -20,6 +20,7 @@ import {
 import { withSqliteBusyRetry } from "@/lib/db/transaction";
 import { apiError, requestBodyErrorResponse } from "@/lib/api-response";
 import { isSqliteUniqueConstraint } from "@/lib/db/errors";
+import { maintenanceTransaction } from "@/lib/db/maintenance-write";
 
 class InviteUnavailableError extends Error {}
 
@@ -111,7 +112,7 @@ export async function POST(request: Request) {
     const passwordHash = await bcrypt.hash(password, 12);
 
     await withSqliteBusyRetry(() =>
-      db.transaction(async (tx) => {
+      maintenanceTransaction(async (tx) => {
         await tx.insert(users).values({
           id: userId,
           username: cleanUsername.toLowerCase(),

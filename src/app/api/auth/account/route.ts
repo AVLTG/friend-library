@@ -22,6 +22,8 @@ import {
   withApiErrorBoundary,
 } from "@/lib/api-response";
 import { isSqliteUniqueConstraint } from "@/lib/db/errors";
+import { maintenanceTransaction } from "@/lib/db/maintenance-write";
+import { withSqliteBusyRetry } from "@/lib/db/transaction";
 
 // Get current user info
 export async function GET() {
@@ -175,15 +177,19 @@ export async function PATCH(request: Request) {
       updates.sessionVersion = sql`${users.sessionVersion} + 1`;
     }
 
-    const updatedUser = await db
-      .update(users)
-      .set(updates)
-      .where(eq(users.id, session.userId))
-      .returning({
-        username: users.username,
-        sessionVersion: users.sessionVersion,
-      })
-      .get();
+    const updatedUser = await withSqliteBusyRetry(() =>
+      maintenanceTransaction((tx) =>
+        tx
+          .update(users)
+          .set(updates)
+          .where(eq(users.id, session.userId))
+          .returning({
+            username: users.username,
+            sessionVersion: users.sessionVersion,
+          })
+          .get(),
+      ),
+    );
 
     const response = NextResponse.json({ success: true });
     if (credentialsChanged) {

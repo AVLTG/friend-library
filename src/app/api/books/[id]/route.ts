@@ -16,6 +16,7 @@ import {
   updateRelationship,
 } from "@/lib/relationship-write";
 import { RelationshipStateError } from "@/lib/relationship-state";
+import { maintenanceTransaction } from "@/lib/db/maintenance-write";
 import {
   generatedIdSchema,
   parseJsonBody,
@@ -156,7 +157,7 @@ export async function DELETE(
   }
 
   const deletedBook = await withSqliteBusyRetry(() =>
-    db.transaction((tx) =>
+    maintenanceTransaction((tx) =>
       tx
         .delete(books)
         .where(eq(books.id, id))

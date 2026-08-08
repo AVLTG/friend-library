@@ -11,6 +11,7 @@ const databasePath = resolve(projectRoot, ".test/migration-upgrade.db");
 const orphanDatabasePath = resolve(projectRoot, ".test/migration-orphan.db");
 const identityDatabasePath = resolve(projectRoot, ".test/migration-identity.db");
 const reviewDatabasePath = resolve(projectRoot, ".test/migration-review.db");
+const emptyLibraryDatabasePath = resolve(projectRoot, ".test/migration-empty-library.db");
 const databaseUrl = pathToFileURL(databasePath).href;
 const migrationsFolder = resolve(projectRoot, "drizzle");
 
@@ -218,10 +219,58 @@ async function verifyReviewWithoutRatingIsRejected() {
   }
 }
 
+async function verifyInitializedEmptyLibraryIsFrozen() {
+  await Promise.all([
+    rm(emptyLibraryDatabasePath, { force: true }),
+    rm(`${emptyLibraryDatabasePath}-shm`, { force: true }),
+    rm(`${emptyLibraryDatabasePath}-wal`, { force: true }),
+  ]);
+  const emptyClient = createClient({
+    url: pathToFileURL(emptyLibraryDatabasePath).href,
+  });
+  try {
+    const baseline = await readFile(
+      resolve(projectRoot, "drizzle/0000_baseline.sql"),
+      "utf8",
+    );
+    await emptyClient.executeMultiple(
+      baseline.replaceAll("--> statement-breakpoint", ""),
+    );
+    await emptyClient.execute(`INSERT INTO users
+      (id, username, first_name, last_name, password_hash, avatar_color, created_at)
+      VALUES ('W12345678901234567890', 'empty-owner', 'Empty', 'Owner', 'hash', '#123456', 1)`);
+    await adoptBaseline(emptyClient, projectRoot);
+    await migrate(drizzle(emptyClient), { migrationsFolder });
+
+    const marker = await emptyClient.execute(
+      "SELECT COUNT(*) AS count FROM __migration_0004_maintenance WHERE enabled = 1",
+    );
+    let blocked = false;
+    try {
+      await emptyClient.execute(`INSERT INTO books
+        (id, title, authors, spine_color, added_by, created_at)
+        VALUES ('X12345678901234567890', 'Blocked', '["Author"]', '#123456', 'W12345678901234567890', 2)`);
+    } catch (error) {
+      blocked = /BookShare maintenance/.test(String(error));
+    }
+    if (Number(marker.rows[0]?.count) !== 1 || !blocked) {
+      throw new Error("Initialized zero-book library was not write-frozen");
+    }
+  } finally {
+    emptyClient.close();
+    await Promise.all([
+      rm(emptyLibraryDatabasePath, { force: true }),
+      rm(`${emptyLibraryDatabasePath}-shm`, { force: true }),
+      rm(`${emptyLibraryDatabasePath}-wal`, { force: true }),
+    ]);
+  }
+}
+
 await mkdir(dirname(databasePath), { recursive: true });
 await verifyOrphanedUpgradeIsRejected();
 await verifyCanonicalIdentityCollisionIsRejected();
 await verifyReviewWithoutRatingIsRejected();
+await verifyInitializedEmptyLibraryIsFrozen();
 
 await Promise.all([
   rm(databasePath, { force: true }),
@@ -400,12 +449,7 @@ try {
       VALUES ('Y12345678901234567890', 'Frozen Write', '["Author"]', '#123456', 'A12345678901234567890', 1)`,
     "Migration write freeze",
   );
-  await client.executeMultiple(
-    maintenanceTriggers.rows
-      .map((row) => `DROP TRIGGER ${String(row.name)}`)
-      .join(";"),
-  );
-  await client.execute("DROP TABLE __migration_0004_maintenance");
+  await client.execute("DELETE FROM __migration_0004_maintenance");
 
   const migratedUsers = await client.execute(
     "SELECT username, role, session_version FROM users ORDER BY created_at, id",
