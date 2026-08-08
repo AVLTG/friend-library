@@ -45,6 +45,7 @@ describe("initial setup", () => {
             lastName: index === 0 ? "Zero" : "One",
             passwordHash: "hash",
             avatarColor: "#123456",
+            role: "admin",
           },
           invite: {
             id: index === 0 ? "C12345678901234567890" : "D12345678901234567890",
@@ -66,12 +67,14 @@ describe("initial setup", () => {
 
     const client = createClient({ url: databaseUrl });
     const userCount = await client.execute("SELECT COUNT(*) AS count FROM users");
+    const roles = await client.execute("SELECT role FROM users");
     const inviteCount = await client.execute(
       "SELECT COUNT(*) AS count FROM invite_tokens",
     );
     client.close();
 
     expect(Number(userCount.rows[0]?.count)).toBe(1);
+    expect(roles.rows[0]?.role).toBe("admin");
     expect(Number(inviteCount.rows[0]?.count)).toBe(1);
   });
 });

@@ -120,6 +120,7 @@ export async function POST(request: Request) {
           lastName: cleanLastName,
           passwordHash,
           avatarColor: randomAvatarColor(),
+          role: "member",
         });
 
         const claimedToken = await tx

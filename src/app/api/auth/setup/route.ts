@@ -76,6 +76,7 @@ export async function POST(request: Request) {
         lastName,
         passwordHash,
         avatarColor: randomAvatarColor(),
+        role: "admin",
       },
       invite: {
         id: generateId(),

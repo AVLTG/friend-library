@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { books, userBooks, users } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { getSession, generateId, randomSpineColor } from "@/lib/auth";
+import { createBookWithOwner } from "@/lib/book-write";
 import { sanitizeText } from "@/lib/sanitize";
 import {
   addBookSchema,
@@ -133,52 +134,46 @@ export async function POST(request: Request) {
 
       if (existing) {
         // Book exists, just add user relationship
-        const existingUserBook = await db
-          .select()
-          .from(userBooks)
-          .where(eq(userBooks.bookId, existing.id))
-          .all();
-
-        const alreadyLinked = existingUserBook.find(
-          (ub) => ub.userId === session.userId
-        );
-
-        if (!alreadyLinked) {
-          await db.insert(userBooks).values({
+        await db
+          .insert(userBooks)
+          .values({
             id: generateId(),
             userId: session.userId,
             bookId: existing.id,
             owned: true,
+          })
+          .onConflictDoUpdate({
+            target: [userBooks.userId, userBooks.bookId],
+            set: { owned: true, updatedAt: new Date() },
           });
-        }
 
         return NextResponse.json({ bookId: existing.id, alreadyExisted: true });
       }
     }
 
     const bookId = generateId();
-    await db.insert(books).values({
-      id: bookId,
-      googleBooksId,
-      title,
-      authors: JSON.stringify(authors),
-      isbn,
-      description,
-      coverUrl,
-      pageCount,
-      publishedDate,
-      categories: categories ? JSON.stringify(categories) : null,
-      spineColor: randomSpineColor(),
-      addedBy: session.userId,
-    });
-
-    // Create user_book entry (owner)
-    await db.insert(userBooks).values({
-      id: generateId(),
-      userId: session.userId,
-      bookId,
-      owned: true,
-    });
+    await createBookWithOwner(
+      {
+        id: bookId,
+        googleBooksId,
+        title,
+        authors: JSON.stringify(authors),
+        isbn,
+        description,
+        coverUrl,
+        pageCount,
+        publishedDate,
+        categories: categories ? JSON.stringify(categories) : null,
+        spineColor: randomSpineColor(),
+        addedBy: session.userId,
+      },
+      {
+        id: generateId(),
+        userId: session.userId,
+        bookId,
+        owned: true,
+      },
+    );
 
     return NextResponse.json({ bookId, alreadyExisted: false });
   } catch (error) {

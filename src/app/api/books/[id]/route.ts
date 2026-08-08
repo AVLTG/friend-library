@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { books, userBooks, users } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
-import { getSession, generateId } from "@/lib/auth";
+import { generateId } from "@/lib/auth";
+import { authorizeCurrentUser } from "@/lib/authorization";
+import { withSqliteBusyRetry } from "@/lib/db/transaction";
 import { sanitizeReview } from "@/lib/sanitize";
 import {
   generatedIdSchema,
@@ -16,9 +18,12 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getSession();
-  if (!session) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const authorization = await authorizeCurrentUser();
+  if (!authorization.ok) {
+    return NextResponse.json(
+      { error: authorization.error },
+      { status: authorization.status },
+    );
   }
 
   const { id } = await params;
@@ -103,7 +108,13 @@ export async function GET(
           bookUsers.filter((ub) => ub.userBook.rating !== null).length
         : null,
     currentUserBook:
-      bookUsers.find((ub) => ub.user.id === session.userId)?.userBook || null,
+      bookUsers.find((ub) => ub.user.id === authorization.user.id)?.userBook || null,
+    permissions: {
+      canDeleteGlobally: authorization.user.role === "admin",
+      canRemoveRelationship: bookUsers.some(
+        (ub) => ub.user.id === authorization.user.id,
+      ),
+    },
   });
 }
 
@@ -112,9 +123,12 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getSession();
-  if (!session) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const authorization = await authorizeCurrentUser();
+  if (!authorization.ok) {
+    return NextResponse.json(
+      { error: authorization.error },
+      { status: authorization.status },
+    );
   }
 
   const { id } = await params;
@@ -145,61 +159,51 @@ export async function PATCH(
     return NextResponse.json({ error: "Book not found" }, { status: 404 });
   }
 
-  // Find or create user_book entry
-  let userBook = await db
-    .select()
-    .from(userBooks)
-    .where(
-      and(eq(userBooks.userId, session.userId), eq(userBooks.bookId, id))
-    )
-    .get();
+  const updates: Partial<typeof userBooks.$inferInsert> = { updatedAt: new Date() };
+  if (owned !== undefined) updates.owned = owned;
+  if (annotated !== undefined) updates.annotated = annotated;
+  if (rating !== undefined) updates.rating = rating;
+  if (review !== undefined) updates.review = review;
 
-  if (!userBook) {
-    const newId = generateId();
-    await db.insert(userBooks).values({
-      id: newId,
-      userId: session.userId,
+  if (currentlyReading !== undefined) {
+    updates.currentlyReading = currentlyReading;
+    if (currentlyReading) updates.read = false;
+  }
+  if (read !== undefined) {
+    updates.read = read;
+    if (read) updates.currentlyReading = false;
+  }
+
+  const initialRead = read ?? false;
+  const initialCurrentlyReading = initialRead ? false : (currentlyReading ?? false);
+  await db
+    .insert(userBooks)
+    .values({
+      id: generateId(),
+      userId: authorization.user.id,
       bookId: id,
       owned: owned ?? false,
-      read: read ?? false,
-      currentlyReading: currentlyReading ?? false,
+      read: initialRead,
+      currentlyReading: initialCurrentlyReading,
       annotated: annotated ?? false,
       rating: rating ?? null,
       review: review ?? null,
+    })
+    .onConflictDoUpdate({
+      target: [userBooks.userId, userBooks.bookId],
+      set: updates,
     });
-    userBook = await db
-      .select()
-      .from(userBooks)
-      .where(eq(userBooks.id, newId))
-      .get();
-  } else {
-    const updates: Record<string, unknown> = { updatedAt: new Date() };
-    if (owned !== undefined) updates.owned = owned;
-    if (annotated !== undefined) updates.annotated = annotated;
-    if (rating !== undefined) updates.rating = rating;
-    if (review !== undefined) updates.review = review;
 
-    // Mutual exclusion: currentlyReading and read can't both be true
-    if (currentlyReading !== undefined) {
-      updates.currentlyReading = currentlyReading;
-      if (currentlyReading) updates.read = false;
-    }
-    if (read !== undefined) {
-      updates.read = read;
-      if (read) updates.currentlyReading = false;
-    }
-
-    await db
-      .update(userBooks)
-      .set(updates)
-      .where(eq(userBooks.id, userBook.id));
-
-    userBook = await db
-      .select()
-      .from(userBooks)
-      .where(eq(userBooks.id, userBook.id))
-      .get();
-  }
+  const userBook = await db
+    .select()
+    .from(userBooks)
+    .where(
+      and(
+        eq(userBooks.userId, authorization.user.id),
+        eq(userBooks.bookId, id),
+      ),
+    )
+    .get();
 
   return NextResponse.json(userBook);
 }
@@ -209,9 +213,12 @@ export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getSession();
-  if (!session) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const authorization = await authorizeCurrentUser("admin");
+  if (!authorization.ok) {
+    return NextResponse.json(
+      { error: authorization.error },
+      { status: authorization.status },
+    );
   }
 
   const { id } = await params;
@@ -219,14 +226,18 @@ export async function DELETE(
     return NextResponse.json({ error: "Invalid book ID" }, { status: 400 });
   }
 
-  const book = await db.select().from(books).where(eq(books.id, id)).get();
-  if (!book) {
+  const deletedBook = await withSqliteBusyRetry(() =>
+    db.transaction((tx) =>
+      tx
+        .delete(books)
+        .where(eq(books.id, id))
+        .returning({ id: books.id })
+        .get(),
+    ),
+  );
+  if (!deletedBook) {
     return NextResponse.json({ error: "Book not found" }, { status: 404 });
   }
-
-  // Delete all user_book relationships first, then the book
-  await db.delete(userBooks).where(eq(userBooks.bookId, id));
-  await db.delete(books).where(eq(books.id, id));
 
   return NextResponse.json({ success: true });
 }
