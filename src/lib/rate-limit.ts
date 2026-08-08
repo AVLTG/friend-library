@@ -16,8 +16,6 @@ interface RateLimitResult {
   resetIn: number;
 }
 
-let checksSinceCleanup = 0;
-
 export async function checkRateLimit(
   key: string,
   config: RateLimitConfig,
@@ -45,9 +43,7 @@ export async function checkRateLimit(
 
   const allowed = bucket.count <= config.maxRequests;
 
-  checksSinceCleanup += 1;
-  if (checksSinceCleanup >= 100) {
-    checksSinceCleanup = 0;
+  if (Math.random() < 0.01) {
     try {
       await db
         .delete(rateLimitBuckets)

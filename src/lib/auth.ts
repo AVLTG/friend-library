@@ -5,6 +5,7 @@ import { users } from "./db/schema";
 import { eq } from "drizzle-orm";
 import {
   createSessionToken,
+  LEGACY_SESSION_COOKIE_NAME,
   SESSION_COOKIE_NAME,
   SESSION_MAX_AGE,
   type SessionPayload,
@@ -50,10 +51,13 @@ export function setSessionCookie(response: NextResponse, token: string): void {
     maxAge: SESSION_MAX_AGE,
     path: "/",
   });
+  if (SESSION_COOKIE_NAME !== LEGACY_SESSION_COOKIE_NAME) {
+    expireSessionCookie(response, LEGACY_SESSION_COOKIE_NAME);
+  }
 }
 
-export function clearSessionCookie(response: NextResponse): void {
-  response.cookies.set(SESSION_COOKIE_NAME, "", {
+function expireSessionCookie(response: NextResponse, name: string): void {
+  response.cookies.set(name, "", {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
@@ -61,6 +65,13 @@ export function clearSessionCookie(response: NextResponse): void {
     expires: new Date(0),
     path: "/",
   });
+}
+
+export function clearSessionCookie(response: NextResponse): void {
+  expireSessionCookie(response, SESSION_COOKIE_NAME);
+  if (SESSION_COOKIE_NAME !== LEGACY_SESSION_COOKIE_NAME) {
+    expireSessionCookie(response, LEGACY_SESSION_COOKIE_NAME);
+  }
 }
 
 export async function getCurrentUser() {

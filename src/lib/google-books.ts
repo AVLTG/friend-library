@@ -1,3 +1,22 @@
+import { getGoogleBooksApiKey } from "./env";
+import { safeCoverUrl } from "./validation";
+
+function truncate(value: string | undefined, maxLength: number) {
+  return value?.slice(0, maxLength);
+}
+
+function normalizeAuthors(authors: string[] | undefined): string[] {
+  return (authors || ["Unknown Author"])
+    .slice(0, 20)
+    .map((author) => author.slice(0, 200));
+}
+
+function normalizeCategories(categories: string[] | undefined) {
+  return categories
+    ?.slice(0, 50)
+    .map((category) => category.slice(0, 100));
+}
+
 export interface GoogleBookResult {
   id: string;
   title: string;
@@ -79,15 +98,15 @@ export async function searchBooks(query: string): Promise<GoogleBookResult[]> {
 
     return {
       id: item.id,
-      title: info.title,
-      authors: info.authors || ["Unknown Author"],
-      description: info.description,
-      isbn: isbnValue,
+      title: info.title.slice(0, 500),
+      authors: normalizeAuthors(info.authors),
+      description: truncate(info.description, 5000),
+      isbn: truncate(isbnValue, 20),
       coverUrl: safeCoverUrl(coverUrl) || undefined,
       pageCount:
         info.pageCount && info.pageCount > 0 ? info.pageCount : undefined,
-      publishedDate: info.publishedDate,
-      categories: info.categories,
+      publishedDate: truncate(info.publishedDate, 20),
+      categories: normalizeCategories(info.categories),
     };
   });
 }
@@ -126,16 +145,14 @@ export async function getBookById(
 
   return {
     id: item.id,
-    title: info.title,
-    authors: info.authors || ["Unknown Author"],
-    description: info.description,
-    isbn: isbnValue,
+    title: info.title.slice(0, 500),
+    authors: normalizeAuthors(info.authors),
+    description: truncate(info.description, 5000),
+    isbn: truncate(isbnValue, 20),
     coverUrl: safeCoverUrl(coverUrl) || undefined,
     pageCount:
       info.pageCount && info.pageCount > 0 ? info.pageCount : undefined,
-    publishedDate: info.publishedDate,
-    categories: info.categories,
+    publishedDate: truncate(info.publishedDate, 20),
+    categories: normalizeCategories(info.categories),
   };
 }
-import { getGoogleBooksApiKey } from "./env";
-import { safeCoverUrl } from "./validation";

@@ -17,6 +17,8 @@ test("the first user can create the library", async ({ page }) => {
   await page.getByRole("button", { name: "Create Library" }).click();
 
   await expect(page.getByText("Welcome to BookShare!")).toBeVisible();
+  const inviteToken = (await page.locator("code").textContent())?.trim();
+  expect(inviteToken).toMatch(/^[A-Z0-9]{8}$/);
   await page.getByRole("button", { name: "Enter Your Library" }).click();
   await expect(
     page.getByRole("heading", { name: "Shared Library" }),
@@ -75,4 +77,27 @@ test("the first user can create the library", async ({ page }) => {
   expect(staleResponse.status()).toBe(401);
   expect(staleResponse.headers()["set-cookie"]).toContain("session=");
   await oldSessionContext.dispose();
+
+  const registrationContexts = await Promise.all([
+    request.newContext({ baseURL }),
+    request.newContext({ baseURL }),
+  ]);
+  const registrationResponses = await Promise.all(
+    registrationContexts.map((context, index) =>
+      context.post("/api/auth/register", {
+        headers: { Origin: baseURL },
+        data: {
+          username: `friend-${index}`,
+          firstName: "Friend",
+          lastName: index === 0 ? "Zero" : "One",
+          password: "FriendPassword3#",
+          inviteToken,
+        },
+      }),
+    ),
+  );
+  expect(registrationResponses.map((response) => response.status()).sort()).toEqual([
+    200, 400,
+  ]);
+  await Promise.all(registrationContexts.map((context) => context.dispose()));
 });

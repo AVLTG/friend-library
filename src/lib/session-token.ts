@@ -3,8 +3,11 @@ import { getJwtSecret } from "./env";
 
 const SESSION_ISSUER = "bookshare";
 const SESSION_AUDIENCE = "bookshare-web";
+export const LEGACY_SESSION_COOKIE_NAME = "session";
 export const SESSION_COOKIE_NAME =
-  process.env.NODE_ENV === "production" ? "__Host-bookshare-session" : "session";
+  process.env.NODE_ENV === "production"
+    ? "__Host-bookshare-session"
+    : LEGACY_SESSION_COOKIE_NAME;
 export const SESSION_MAX_AGE = 60 * 60 * 24 * 30;
 
 export interface SessionPayload {

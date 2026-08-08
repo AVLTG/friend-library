@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { users, inviteTokens } from "@/lib/db/schema";
-import { eq, and, isNull } from "drizzle-orm";
+import { eq, and, gt, isNull } from "drizzle-orm";
 import {
   createSession,
   setSessionCookie,
@@ -17,6 +17,8 @@ import {
   registrationSchema,
   RequestBodyError,
 } from "@/lib/validation";
+
+class InviteUnavailableError extends Error {}
 
 export async function POST(request: Request) {
   const ip = getClientIp(request);
@@ -108,19 +110,33 @@ export async function POST(request: Request) {
     const userId = generateId();
     const passwordHash = await bcrypt.hash(password, 12);
 
-    await db.insert(users).values({
-      id: userId,
-      username: cleanUsername.toLowerCase(),
-      firstName: cleanFirstName,
-      lastName: cleanLastName,
-      passwordHash,
-      avatarColor: randomAvatarColor(),
-    });
+    await db.transaction(async (tx) => {
+      await tx.insert(users).values({
+        id: userId,
+        username: cleanUsername.toLowerCase(),
+        firstName: cleanFirstName,
+        lastName: cleanLastName,
+        passwordHash,
+        avatarColor: randomAvatarColor(),
+      });
 
-    await db
-      .update(inviteTokens)
-      .set({ usedBy: userId, usedAt: new Date() })
-      .where(eq(inviteTokens.id, token.id));
+      const claimedToken = await tx
+        .update(inviteTokens)
+        .set({ usedBy: userId, usedAt: new Date() })
+        .where(
+          and(
+            eq(inviteTokens.id, token.id),
+            isNull(inviteTokens.usedBy),
+            gt(inviteTokens.expiresAt, new Date()),
+          ),
+        )
+        .returning({ id: inviteTokens.id })
+        .get();
+
+      if (!claimedToken) {
+        throw new InviteUnavailableError();
+      }
+    });
 
     const sessionToken = await createSession({
       userId,
@@ -135,6 +151,12 @@ export async function POST(request: Request) {
   } catch (error) {
     if (error instanceof RequestBodyError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    if (error instanceof InviteUnavailableError) {
+      return NextResponse.json(
+        { error: "Invalid, expired, or already used invite token" },
+        { status: 400 },
+      );
     }
     console.error("Registration error:", error);
     return NextResponse.json(

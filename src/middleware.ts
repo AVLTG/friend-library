@@ -2,7 +2,11 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getAllowedOrigins } from "@/lib/env";
 import { lookupSessionVersion } from "@/lib/db/session-version";
 import { applySecurityHeaders } from "@/lib/security-headers";
-import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/session-token";
+import {
+  LEGACY_SESSION_COOKIE_NAME,
+  SESSION_COOKIE_NAME,
+  verifySessionToken,
+} from "@/lib/session-token";
 
 const PUBLIC_PAGES = new Set(["/login", "/register"]);
 const PUBLIC_APIS = new Set([
@@ -18,8 +22,8 @@ function finalize(response: NextResponse): NextResponse {
   return response;
 }
 
-function clearInvalidSession(response: NextResponse): void {
-  response.cookies.set(SESSION_COOKIE_NAME, "", {
+function clearCookie(response: NextResponse, name: string): void {
+  response.cookies.set(name, "", {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
@@ -29,13 +33,16 @@ function clearInvalidSession(response: NextResponse): void {
   });
 }
 
-function unauthorized(request: NextRequest, clearCookie: boolean): NextResponse {
+function unauthorized(
+  request: NextRequest,
+  clearCurrentCookie: boolean,
+): NextResponse {
   const response = request.nextUrl.pathname.startsWith("/api/")
     ? NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     : NextResponse.redirect(new URL("/login", request.url));
 
-  if (clearCookie) clearInvalidSession(response);
-  return finalize(response);
+  if (clearCurrentCookie) clearCookie(response, SESSION_COOKIE_NAME);
+  return response;
 }
 
 export async function middleware(request: NextRequest) {
@@ -43,18 +50,27 @@ export async function middleware(request: NextRequest) {
   const isPublicPage = PUBLIC_PAGES.has(pathname);
   const isPublicApi = PUBLIC_APIS.has(pathname);
   const isPublic = isPublicPage || isPublicApi;
+  const legacySessionPresent =
+    SESSION_COOKIE_NAME !== LEGACY_SESSION_COOKIE_NAME &&
+    request.cookies.has(LEGACY_SESSION_COOKIE_NAME);
+  const finish = (response: NextResponse) => {
+    if (legacySessionPresent) {
+      clearCookie(response, LEGACY_SESSION_COOKIE_NAME);
+    }
+    return finalize(response);
+  };
 
   if (pathname.startsWith("/api/") && UNSAFE_METHODS.has(request.method)) {
     try {
       const origin = request.headers.get("origin");
       if (!origin || !getAllowedOrigins().has(origin)) {
-        return finalize(
+        return finish(
           NextResponse.json({ error: "Invalid request origin" }, { status: 403 }),
         );
       }
     } catch (error) {
       console.error("Origin configuration error:", error);
-      return finalize(
+      return finish(
         NextResponse.json(
           { error: "Security configuration unavailable" },
           { status: 503 },
@@ -76,7 +92,7 @@ export async function middleware(request: NextRequest) {
       }
     } catch (error) {
       console.error("Session verification error:", error);
-      return finalize(
+      return finish(
         NextResponse.json(
           { error: "Authentication configuration unavailable" },
           { status: 503 },
@@ -86,16 +102,18 @@ export async function middleware(request: NextRequest) {
   }
 
   if (!sessionValid && !isPublic) {
-    return unauthorized(request, Boolean(token));
+    return finish(unauthorized(request, Boolean(token)));
   }
 
   if (sessionValid && isPublicPage) {
-    return finalize(NextResponse.redirect(new URL("/library", request.url)));
+    return finish(NextResponse.redirect(new URL("/library", request.url)));
   }
 
   const response = NextResponse.next();
-  if (token && !sessionValid && !isPublicApi) clearInvalidSession(response);
-  return finalize(response);
+  if (token && !sessionValid && !isPublicApi) {
+    clearCookie(response, SESSION_COOKIE_NAME);
+  }
+  return finish(response);
 }
 
 export const config = {

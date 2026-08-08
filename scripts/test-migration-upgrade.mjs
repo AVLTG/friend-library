@@ -25,6 +25,19 @@ try {
     "utf8",
   );
   await client.executeMultiple(baseline.replaceAll("--> statement-breakpoint", ""));
+
+  await client.execute("ALTER TABLE user_books DROP COLUMN review");
+  let malformedSchemaRejected = false;
+  try {
+    await adoptBaseline(client, projectRoot);
+  } catch (error) {
+    malformedSchemaRejected = /column/.test(String(error));
+  }
+  if (!malformedSchemaRejected) {
+    throw new Error("Baseline adoption accepted a schema with a missing column");
+  }
+  await client.execute("ALTER TABLE user_books ADD COLUMN review text");
+
   await client.execute({
     sql: `INSERT INTO users
       (id, username, first_name, last_name, password_hash, avatar_color, created_at)

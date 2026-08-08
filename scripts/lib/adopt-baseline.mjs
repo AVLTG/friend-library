@@ -2,16 +2,180 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
-const requiredColumns = {
-  books: ["id", "title", "authors", "spine_color", "added_by", "created_at"],
-  invite_tokens: ["id", "token", "created_by", "expires_at", "created_at"],
-  user_books: ["id", "user_id", "book_id", "owned", "read", "updated_at"],
-  users: ["id", "username", "password_hash", "avatar_color", "created_at"],
+const baselineSchema = {
+  books: {
+    id: ["TEXT", true, true],
+    google_books_id: ["TEXT", false, false],
+    title: ["TEXT", true, false],
+    authors: ["TEXT", true, false],
+    isbn: ["TEXT", false, false],
+    description: ["TEXT", false, false],
+    cover_url: ["TEXT", false, false],
+    page_count: ["INTEGER", false, false],
+    published_date: ["TEXT", false, false],
+    categories: ["TEXT", false, false],
+    spine_color: ["TEXT", true, false],
+    added_by: ["TEXT", true, false],
+    created_at: ["INTEGER", true, false],
+  },
+  invite_tokens: {
+    id: ["TEXT", true, true],
+    token: ["TEXT", true, false],
+    created_by: ["TEXT", true, false],
+    used_by: ["TEXT", false, false],
+    used_at: ["INTEGER", false, false],
+    expires_at: ["INTEGER", true, false],
+    created_at: ["INTEGER", true, false],
+  },
+  user_books: {
+    id: ["TEXT", true, true],
+    user_id: ["TEXT", true, false],
+    book_id: ["TEXT", true, false],
+    owned: ["INTEGER", true, false, ["false", "0"]],
+    read: ["INTEGER", true, false, ["false", "0"]],
+    currently_reading: ["INTEGER", true, false, ["false", "0"]],
+    annotated: ["INTEGER", true, false, ["false", "0"]],
+    rating: ["REAL", false, false],
+    review: ["TEXT", false, false],
+    created_at: ["INTEGER", true, false],
+    updated_at: ["INTEGER", true, false],
+  },
+  users: {
+    id: ["TEXT", true, true],
+    username: ["TEXT", true, false],
+    first_name: ["TEXT", true, false],
+    last_name: ["TEXT", true, false],
+    password_hash: ["TEXT", true, false],
+    avatar_color: ["TEXT", true, false],
+    created_at: ["INTEGER", true, false],
+  },
 };
 
-async function getColumns(client, tableName) {
+const requiredUniqueIndexes = {
+  invite_tokens: [["token"]],
+  users: [["username"]],
+};
+
+const requiredForeignKeys = {
+  books: [["added_by", "users", "id"]],
+  invite_tokens: [
+    ["created_by", "users", "id"],
+    ["used_by", "users", "id"],
+  ],
+  user_books: [
+    ["user_id", "users", "id"],
+    ["book_id", "books", "id"],
+  ],
+};
+
+async function getColumnRows(client, tableName) {
   const result = await client.execute(`PRAGMA table_info('${tableName}')`);
-  return new Set(result.rows.map((row) => String(row.name)));
+  return result.rows;
+}
+
+function normalizeDefault(value) {
+  if (value === null || value === undefined) return null;
+  return String(value).replace(/^\((.*)\)$/, "$1").toLowerCase();
+}
+
+async function verifyColumns(client, tableName, expectedColumns) {
+  const rows = await getColumnRows(client, tableName);
+  if (rows.length !== Object.keys(expectedColumns).length) {
+    throw new Error(`Baseline column count differs for ${tableName}`);
+  }
+
+  for (const [columnName, expected] of Object.entries(expectedColumns)) {
+    const row = rows.find((candidate) => candidate.name === columnName);
+    if (!row) throw new Error(`Required baseline column is missing: ${tableName}.${columnName}`);
+
+    const [type, notNull, primaryKey, defaults] = expected;
+    if (
+      String(row.type).toUpperCase() !== type ||
+      Boolean(row.notnull) !== notNull ||
+      Boolean(row.pk) !== primaryKey
+    ) {
+      throw new Error(`Baseline column definition differs: ${tableName}.${columnName}`);
+    }
+
+    const actualDefault = normalizeDefault(row.dflt_value);
+    if (defaults) {
+      if (!defaults.includes(actualDefault)) {
+        throw new Error(`Baseline default differs: ${tableName}.${columnName}`);
+      }
+    } else if (actualDefault !== null) {
+      throw new Error(`Unexpected baseline default: ${tableName}.${columnName}`);
+    }
+  }
+}
+
+async function verifyUniqueIndexes(client, tableName, expectedIndexes) {
+  const indexList = await client.execute(`PRAGMA index_list('${tableName}')`);
+  const uniqueColumns = [];
+
+  for (const index of indexList.rows.filter((row) => Number(row.unique) === 1)) {
+    const details = await client.execute(`PRAGMA index_info('${String(index.name)}')`);
+    uniqueColumns.push(details.rows.map((row) => String(row.name)));
+  }
+
+  for (const expected of expectedIndexes) {
+    if (!uniqueColumns.some((columns) => columns.join("|") === expected.join("|"))) {
+      throw new Error(`Required unique index is missing: ${tableName}(${expected.join(",")})`);
+    }
+  }
+}
+
+async function verifyForeignKeys(client, tableName, expectedKeys) {
+  const result = await client.execute(`PRAGMA foreign_key_list('${tableName}')`);
+
+  for (const [from, targetTable, to] of expectedKeys) {
+    const matches = result.rows.some(
+      (row) =>
+        row.from === from &&
+        row.table === targetTable &&
+        row.to === to &&
+        String(row.on_update).toUpperCase() === "NO ACTION" &&
+        String(row.on_delete).toUpperCase() === "NO ACTION",
+    );
+    if (!matches) {
+      throw new Error(`Required foreign key is missing: ${tableName}.${from}`);
+    }
+  }
+}
+
+export async function verifyBaselineSchema(client) {
+  const tables = await client.execute(
+    "SELECT name FROM sqlite_master WHERE type = 'table'",
+  );
+  const tableNames = new Set(tables.rows.map((row) => String(row.name)));
+
+  for (const tableName of Object.keys(baselineSchema)) {
+    if (!tableNames.has(tableName)) {
+      throw new Error(`Required baseline table is missing: ${tableName}`);
+    }
+  }
+
+  const userColumns = new Set(
+    (await getColumnRows(client, "users")).map((row) => String(row.name)),
+  );
+  if (userColumns.has("session_version") || tableNames.has("rate_limit_buckets")) {
+    throw new Error(
+      "Phase 2 schema is already partially present; inspect it before adopting the baseline",
+    );
+  }
+
+  for (const [tableName, columns] of Object.entries(baselineSchema)) {
+    await verifyColumns(client, tableName, columns);
+    await verifyUniqueIndexes(
+      client,
+      tableName,
+      requiredUniqueIndexes[tableName] ?? [],
+    );
+    await verifyForeignKeys(
+      client,
+      tableName,
+      requiredForeignKeys[tableName] ?? [],
+    );
+  }
 }
 
 export async function adoptBaseline(client, projectRoot) {
@@ -45,29 +209,7 @@ export async function adoptBaseline(client, projectRoot) {
     }
   }
 
-  const tables = await client.execute(
-    "SELECT name FROM sqlite_master WHERE type = 'table'",
-  );
-  const tableNames = new Set(tables.rows.map((row) => String(row.name)));
-
-  for (const [tableName, columns] of Object.entries(requiredColumns)) {
-    if (!tableNames.has(tableName)) {
-      throw new Error(`Required baseline table is missing: ${tableName}`);
-    }
-    const actualColumns = await getColumns(client, tableName);
-    for (const column of columns) {
-      if (!actualColumns.has(column)) {
-        throw new Error(`Required baseline column is missing: ${tableName}.${column}`);
-      }
-    }
-  }
-
-  const userColumns = await getColumns(client, "users");
-  if (userColumns.has("session_version") || tableNames.has("rate_limit_buckets")) {
-    throw new Error(
-      "Phase 2 schema is already partially present; inspect it before adopting the baseline",
-    );
-  }
+  await verifyBaselineSchema(client);
 
   await client.executeMultiple(`
     CREATE TABLE IF NOT EXISTS __drizzle_migrations (
