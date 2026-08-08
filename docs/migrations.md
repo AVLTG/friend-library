@@ -32,3 +32,18 @@ Before deploying the security changes, also inventory existing `books.cover_url`
 ## Existing Data
 
 SQLite and Turso require special care when adding non-null columns. Prefer migrations that add the column with a safe default, backfill existing rows, and only then introduce stricter constraints when needed.
+
+## Roles And Integrity Migration
+
+Migration `0003_roles-database-integrity` must be applied before deploying code that reads `users.role` or uses the `(user_id, book_id)` upsert target.
+
+Before applying it to a current production clone and production itself:
+
+1. Confirm `PRAGMA foreign_key_check` returns no rows.
+2. Inventory duplicate `(user_id, book_id)` relationships, invalid boolean/rating values, and rows where both reading states are active.
+3. Confirm which user has the earliest `created_at`, with `id` as the deterministic tie-breaker. That user is backfilled as admin.
+4. Record row counts and create a fresh production backup.
+
+The migration fails before changing application tables if legacy foreign-key violations exist. It consolidates duplicate relationships deterministically, prefers currently-reading over read, normalizes boolean values, preserves the newest rating and review clearing state, normalizes invalid ratings to null, installs role/state/rating/invite checks, adds relationship uniqueness and lookup indexes, and enables relationship cascades. Google Books IDs and ISBNs remain non-unique until edition identity is defined in Phase 5.
+
+After migration, repeat the row-count and foreign-key checks, verify exactly one existing admin, exercise member/admin deletion permissions, and smoke-test book creation plus invite generation before deployment.

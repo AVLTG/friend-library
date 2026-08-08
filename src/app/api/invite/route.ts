@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { inviteTokens } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
-import { getSession, generateId, generateInviteToken } from "@/lib/auth";
+import { getSession } from "@/lib/auth";
 import { checkRateLimit, INVITE_LIMIT } from "@/lib/rate-limit";
+import { createInviteForUser } from "@/lib/invite-token";
 
 export async function GET() {
   const session = await getSession();
@@ -48,15 +49,13 @@ export async function POST() {
     );
   }
 
-  const token = generateInviteToken();
-  const id = generateId();
-
-  await db.insert(inviteTokens).values({
-    id,
-    token,
-    createdBy: session.userId,
-    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
-  });
-
-  return NextResponse.json({ token, expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) });
+  try {
+    return NextResponse.json(await createInviteForUser(session.userId));
+  } catch (error) {
+    console.error("Invite generation error:", error);
+    return NextResponse.json(
+      { error: "Invite generation is temporarily unavailable" },
+      { status: 503 },
+    );
+  }
 }

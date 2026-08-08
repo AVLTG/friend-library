@@ -26,7 +26,10 @@ describe("session tokens", () => {
 
   it("rejects tampered and legacy tokens", async () => {
     const token = await createSessionToken(payload);
-    await expect(verifySessionToken(`${token.slice(0, -1)}x`)).resolves.toBeNull();
+    const segments = token.split(".");
+    const signature = segments[2];
+    segments[2] = `${signature[0] === "A" ? "B" : "A"}${signature.slice(1)}`;
+    await expect(verifySessionToken(segments.join("."))).resolves.toBeNull();
 
     const legacyToken = await new SignJWT({ username: payload.username })
       .setProtectedHeader({ alg: "HS256" })

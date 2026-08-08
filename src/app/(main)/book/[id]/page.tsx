@@ -78,6 +78,10 @@ interface BookDetail {
     rating: number | null;
     review: string | null;
   } | null;
+  permissions: {
+    canDeleteGlobally: boolean;
+    canRemoveRelationship: boolean;
+  };
 }
 
 export default function BookDetailPage({
@@ -95,6 +99,8 @@ export default function BookDetailPage({
   const [saving, setSaving] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
+  const [removing, setRemoving] = useState(false);
 
   useEffect(() => {
     fetchBook();
@@ -166,6 +172,28 @@ export default function BookDetailPage({
       console.error("Failed to delete:", error);
     } finally {
       setDeleting(false);
+    }
+  }
+
+  async function removeRelationship() {
+    setRemoving(true);
+    try {
+      const res = await fetch(`/api/books/${id}/relationship`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || "Failed to remove your book activity");
+      }
+      setShowRemoveConfirm(false);
+      setShowReviewForm(false);
+      setReviewText("");
+      setReviewRating(null);
+      await fetchBook();
+    } catch (error) {
+      console.error("Failed to remove relationship:", error);
+    } finally {
+      setRemoving(false);
     }
   }
 
@@ -346,13 +374,62 @@ export default function BookDetailPage({
                 {userBook?.rating ? "Edit Review" : "Rate & Review"}
               </button>
             </div>
-            <button
-              onClick={() => setShowDeleteConfirm(true)}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors text-xs"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              Remove from library
-            </button>
+            <div className="flex flex-wrap gap-2">
+              {book.permissions.canRemoveRelationship && (
+                <button
+                  onClick={() => setShowRemoveConfirm(true)}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-warm-500 hover:text-warm-700 hover:bg-warm-100 transition-colors text-xs"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  Remove my activity
+                </button>
+              )}
+              {book.permissions.canDeleteGlobally && (
+                <button
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors text-xs"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Delete from shared library
+                </button>
+              )}
+            </div>
+
+            <AnimatePresence>
+              {showRemoveConfirm && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="overflow-hidden mt-4"
+                >
+                  <div className="p-4 bg-warm-50 border border-warm-200 rounded-lg">
+                    <p className="text-warm-800 text-sm font-medium mb-1">
+                      Remove your activity for &quot;{book.title}&quot;?
+                    </p>
+                    <p className="text-warm-600 text-xs mb-3">
+                      Your statuses, rating, and review will be removed. The book and everyone else&apos;s activity will remain.
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={removeRelationship}
+                        disabled={removing}
+                        className="flex items-center gap-2 px-4 py-2 bg-warm-700 text-white rounded-lg text-sm font-medium hover:bg-warm-800 transition-colors disabled:opacity-50"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                        {removing ? "Removing..." : "Remove my activity"}
+                      </button>
+                      <button
+                        onClick={() => setShowRemoveConfirm(false)}
+                        className="px-4 py-2 text-warm-600 hover:bg-warm-100 rounded-lg text-sm font-medium transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* Delete confirmation */}
             <AnimatePresence>
@@ -365,7 +442,7 @@ export default function BookDetailPage({
                 >
                   <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
                     <p className="text-red-800 text-sm font-medium mb-1">
-                      Remove &quot;{book.title}&quot; from the shared library?
+                      Delete &quot;{book.title}&quot; from the shared library?
                     </p>
                     <p className="text-red-600 text-xs mb-3">
                       This will remove the book and all associated reviews, ratings, and ownership records for everyone.
@@ -377,7 +454,7 @@ export default function BookDetailPage({
                         className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-50"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
-                        {deleting ? "Removing..." : "Yes, remove it"}
+                        {deleting ? "Deleting..." : "Yes, delete it"}
                       </button>
                       <button
                         onClick={() => setShowDeleteConfirm(false)}
