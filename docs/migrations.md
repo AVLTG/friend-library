@@ -52,6 +52,8 @@ After migration, repeat the row-count and foreign-key checks, verify exactly one
 
 Migration `0004_api-correctness` must be applied before deploying code that writes `book_google_ids` or relies on canonical ISBN uniqueness.
 
+Because the pre-`0004` application does not maintain Google alias rows or canonicalize every ISBN write, use an enforced maintenance window rather than leaving the old application writable between migration and deployment. In the current Turso/Vercel setup, invalidate the old database tokens immediately before migration, install a newly generated token in Vercel production, apply and verify `0004` with that new token, then merge to trigger the deployment. The old deployment remains unable to access the database until the replacement deployment is live.
+
 Before applying it:
 
 1. Inventory exact and canonical ISBN collisions, duplicate Google Books IDs, blank reviews, and written reviews without ratings.

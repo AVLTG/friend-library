@@ -43,6 +43,7 @@ SELECT CASE WHEN EXISTS (
 	WHERE NOT (
 		(
 			LENGTH(`compact`) = 13
+			AND SUBSTR(`compact`, 1, 3) IN ('978', '979')
 			AND `compact` NOT GLOB '*[^0-9]*'
 			AND (
 				CAST(SUBSTR(`compact`, 1, 1) AS INTEGER)

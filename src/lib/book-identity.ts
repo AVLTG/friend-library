@@ -21,6 +21,7 @@ function isValidIsbn10(value: string): boolean {
 function isValidIsbn13(value: string): boolean {
   return (
     /^\d{13}$/.test(value) &&
+    (value.startsWith("978") || value.startsWith("979")) &&
     isbn13CheckDigit(value.slice(0, 12)) === Number(value[12])
   );
 }

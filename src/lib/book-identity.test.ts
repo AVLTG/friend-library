@@ -16,7 +16,13 @@ describe("book identity normalization", () => {
     expect(normalizeIsbn(input)).toBe(expected);
   });
 
-  it.each(["", "1234567890", "9781234567890", "not-an-isbn"])(
+  it.each([
+    "",
+    "1234567890",
+    "9781234567890",
+    "4006381333931",
+    "not-an-isbn",
+  ])(
     "rejects invalid ISBN %s",
     (input) => {
       expect(normalizeIsbn(input)).toBeNull();
