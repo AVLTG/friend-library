@@ -17,6 +17,7 @@ import {
   registrationSchema,
   RequestBodyError,
 } from "@/lib/validation";
+import { withSqliteBusyRetry } from "@/lib/db/transaction";
 
 class InviteUnavailableError extends Error {}
 
@@ -110,33 +111,35 @@ export async function POST(request: Request) {
     const userId = generateId();
     const passwordHash = await bcrypt.hash(password, 12);
 
-    await db.transaction(async (tx) => {
-      await tx.insert(users).values({
-        id: userId,
-        username: cleanUsername.toLowerCase(),
-        firstName: cleanFirstName,
-        lastName: cleanLastName,
-        passwordHash,
-        avatarColor: randomAvatarColor(),
-      });
+    await withSqliteBusyRetry(() =>
+      db.transaction(async (tx) => {
+        await tx.insert(users).values({
+          id: userId,
+          username: cleanUsername.toLowerCase(),
+          firstName: cleanFirstName,
+          lastName: cleanLastName,
+          passwordHash,
+          avatarColor: randomAvatarColor(),
+        });
 
-      const claimedToken = await tx
-        .update(inviteTokens)
-        .set({ usedBy: userId, usedAt: new Date() })
-        .where(
-          and(
-            eq(inviteTokens.id, token.id),
-            isNull(inviteTokens.usedBy),
-            gt(inviteTokens.expiresAt, new Date()),
-          ),
-        )
-        .returning({ id: inviteTokens.id })
-        .get();
+        const claimedToken = await tx
+          .update(inviteTokens)
+          .set({ usedBy: userId, usedAt: new Date() })
+          .where(
+            and(
+              eq(inviteTokens.id, token.id),
+              isNull(inviteTokens.usedBy),
+              gt(inviteTokens.expiresAt, new Date()),
+            ),
+          )
+          .returning({ id: inviteTokens.id })
+          .get();
 
-      if (!claimedToken) {
-        throw new InviteUnavailableError();
-      }
-    });
+        if (!claimedToken) {
+          throw new InviteUnavailableError();
+        }
+      }),
+    );
 
     const sessionToken = await createSession({
       userId,
