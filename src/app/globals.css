@@ -46,6 +46,10 @@
     font-family: var(--font-sans);
   }
 
+  :focus-visible {
+    outline-color: var(--color-warm-700);
+  }
+
   ::selection {
     background-color: var(--color-warm-300);
     color: var(--color-warm-900);
@@ -66,6 +70,17 @@
 
   ::-webkit-scrollbar-thumb:hover {
     background: var(--color-warm-500);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
 

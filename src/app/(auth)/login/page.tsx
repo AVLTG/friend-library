@@ -130,23 +130,26 @@ export default function LoginPage() {
 
   if (setupRequest.status === "loading") {
     return (
-      <div className="min-h-screen bg-cream flex items-center justify-center">
+      <main className="min-h-screen bg-cream flex items-center justify-center">
+        <div role="status" className="flex items-center gap-3 text-warm-700">
         <motion.div
           animate={{ rotate: 360 }}
           transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
         >
           <BookOpen className="w-8 h-8 text-warm-500" />
         </motion.div>
-      </div>
+          <span className="text-sm">Checking library setup...</span>
+        </div>
+      </main>
     );
   }
 
   if (setupRequest.status === "error") {
     return (
-      <div className="min-h-screen bg-cream flex items-center justify-center p-4">
+      <main className="min-h-screen bg-cream flex items-center justify-center p-4">
         <div className="card-warm p-8 max-w-md w-full text-center">
           <BookOpen className="w-8 h-8 text-warm-500 mx-auto mb-4" />
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+          <div role="alert" className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
             {setupRequest.message}
           </div>
           <button
@@ -157,7 +160,7 @@ export default function LoginPage() {
             Retry
           </button>
         </div>
-      </div>
+      </main>
     );
   }
 
@@ -165,7 +168,7 @@ export default function LoginPage() {
 
   if (setupInviteToken) {
     return (
-      <div className="min-h-screen bg-cream flex items-center justify-center p-4">
+      <main className="min-h-screen bg-cream flex items-center justify-center p-4">
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -185,7 +188,7 @@ export default function LoginPage() {
               {setupInviteToken}
             </code>
           </div>
-          <p className="text-sm text-warm-500 mb-6">
+          <p className="text-sm text-warm-600 mb-6">
             This token expires in 7 days. You can generate more from settings.
           </p>
           <button
@@ -198,12 +201,12 @@ export default function LoginPage() {
             Enter Your Library
           </button>
         </motion.div>
-      </div>
+      </main>
     );
   }
 
   return (
-    <div className="min-h-screen bg-cream flex items-center justify-center p-4">
+    <main className="min-h-screen bg-cream flex items-center justify-center p-4">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -223,38 +226,42 @@ export default function LoginPage() {
           <h1 className="font-serif text-3xl font-bold text-warm-900">
             BookShare
           </h1>
-          <p className="text-warm-500 mt-1">
+          <p className="text-warm-600 mt-1">
             {isSetup ? "Welcome back to your library" : "Set up your library"}
           </p>
         </div>
 
         {/* Form Card */}
-        <div className="card-warm p-8">
+        <div className="card-warm p-5 sm:p-8">
           <form onSubmit={isSetup ? handleLogin : handleSetup}>
             {!isSetup && (
-              <div className="grid grid-cols-2 gap-3 mb-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
                 <div>
-                  <label className="block text-sm font-medium text-warm-700 mb-1.5">
+                  <label htmlFor="setup-first-name" className="block text-sm font-medium text-warm-700 mb-1.5">
                     First Name
                   </label>
                   <input
                     type="text"
+                    id="setup-first-name"
+                    autoComplete="given-name"
                     value={firstName}
                     onChange={(e) => setFirstName(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-cream border border-warm-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-400 focus:border-transparent text-warm-900 placeholder-warm-300"
+                    className="w-full px-4 py-2.5 bg-cream border border-warm-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-700 focus:border-transparent text-warm-900 placeholder-warm-600"
                     placeholder="Jane"
                     required
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-warm-700 mb-1.5">
+                  <label htmlFor="setup-last-name" className="block text-sm font-medium text-warm-700 mb-1.5">
                     Last Name
                   </label>
                   <input
                     type="text"
+                    id="setup-last-name"
+                    autoComplete="family-name"
                     value={lastName}
                     onChange={(e) => setLastName(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-cream border border-warm-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-400 focus:border-transparent text-warm-900 placeholder-warm-300"
+                    className="w-full px-4 py-2.5 bg-cream border border-warm-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-700 focus:border-transparent text-warm-900 placeholder-warm-600"
                     placeholder="Doe"
                     required
                   />
@@ -263,36 +270,42 @@ export default function LoginPage() {
             )}
 
             <div className="mb-4">
-              <label className="block text-sm font-medium text-warm-700 mb-1.5">
+              <label htmlFor="login-username" className="block text-sm font-medium text-warm-700 mb-1.5">
                 Username
               </label>
               <input
                 type="text"
+                id="login-username"
+                autoComplete="username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="w-full px-4 py-2.5 bg-cream border border-warm-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-400 focus:border-transparent text-warm-900 placeholder-warm-300"
+                className="w-full px-4 py-2.5 bg-cream border border-warm-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-700 focus:border-transparent text-warm-900 placeholder-warm-600"
                 placeholder="janedoe"
                 required
               />
             </div>
 
             <div className="mb-6">
-              <label className="block text-sm font-medium text-warm-700 mb-1.5">
+              <label htmlFor="login-password" className="block text-sm font-medium text-warm-700 mb-1.5">
                 Password
               </label>
               <div className="relative">
                 <input
                   type={showPassword ? "text" : "password"}
+                  id="login-password"
+                  autoComplete={isSetup ? "current-password" : "new-password"}
+                  aria-describedby={!isSetup ? "setup-password-help" : undefined}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-cream border border-warm-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-400 focus:border-transparent text-warm-900 placeholder-warm-300 pr-12"
+                  className="w-full px-4 py-2.5 bg-cream border border-warm-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-700 focus:border-transparent text-warm-900 placeholder-warm-600 pr-12"
                   placeholder="Min 10 chars, mixed case, number, symbol"
                   required
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-warm-400 hover:text-warm-600"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  className="absolute right-1 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg text-warm-600 hover:bg-warm-100 hover:text-warm-800"
                 >
                   {showPassword ? (
                     <EyeOff className="w-5 h-5" />
@@ -301,10 +314,16 @@ export default function LoginPage() {
                   )}
                 </button>
               </div>
+              {!isSetup && (
+                <p id="setup-password-help" className="mt-1.5 text-xs text-warm-600">
+                  Use at least 10 characters with uppercase, lowercase, a number, and a symbol.
+                </p>
+              )}
             </div>
 
             {error && (
               <motion.div
+                role="alert"
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm"
@@ -327,7 +346,7 @@ export default function LoginPage() {
           </form>
 
           {isSetup && (
-            <p className="text-center mt-4 text-sm text-warm-500">
+            <p className="text-center mt-4 text-sm text-warm-600">
               Have an invite?{" "}
               <Link
                 href="/register"
@@ -339,6 +358,6 @@ export default function LoginPage() {
           )}
         </div>
       </motion.div>
-    </div>
+    </main>
   );
 }

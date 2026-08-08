@@ -252,25 +252,26 @@ export default function SettingsPage() {
       <h1 className="font-serif text-3xl font-bold text-warm-900 mb-2">
         Settings
       </h1>
-      <p className="text-warm-500 text-sm mb-8">
+      <p className="text-warm-600 text-sm mb-8">
         Manage your account and invites
       </p>
 
       {/* Account Settings */}
       {profileLoading && !profile && (
-        <div className="card-warm p-6 mb-8 flex items-center justify-center py-12">
+        <div role="status" className="card-warm p-6 mb-8 flex items-center justify-center gap-3 py-12 text-warm-700">
           <motion.div
             animate={{ rotate: 360 }}
             transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
           >
             <User className="w-6 h-6 text-warm-400" />
           </motion.div>
+          <span className="text-sm">Loading your account...</span>
         </div>
       )}
 
       {profileError && !profile && (
-        <div className="card-warm p-6 mb-8">
-          <div className="p-3 rounded-lg text-sm bg-red-50 border border-red-200 text-red-700">
+        <div className="card-warm p-4 sm:p-6 mb-8">
+          <div role="alert" className="p-3 rounded-lg text-sm bg-red-50 border border-red-200 text-red-700">
             <p>{profileError}</p>
             <button
               type="button"
@@ -284,9 +285,10 @@ export default function SettingsPage() {
       )}
 
       {profile && (
-        <div className="card-warm p-6 mb-8">
+        <div className="card-warm p-4 sm:p-6 mb-8">
           <div className="flex items-center gap-3 mb-6">
             <div
+              aria-hidden="true"
               className="w-10 h-10 rounded-lg flex items-center justify-center text-white text-sm font-bold"
               style={{ backgroundColor: profile.avatarColor }}
             >
@@ -296,14 +298,14 @@ export default function SettingsPage() {
               <h2 className="font-serif text-lg font-bold text-warm-900">
                 Account
               </h2>
-              <p className="text-warm-500 text-xs">
+              <p className="text-warm-600 text-xs">
                 Update your display name and username
               </p>
             </div>
           </div>
 
           {profileError && (
-            <div className="p-3 rounded-lg text-sm bg-red-50 border border-red-200 text-red-700 mb-4">
+            <div role="alert" className="p-3 rounded-lg text-sm bg-red-50 border border-red-200 text-red-700 mb-4">
               <p>{profileError}</p>
               <button
                 type="button"
@@ -316,66 +318,75 @@ export default function SettingsPage() {
           )}
 
           <form onSubmit={saveProfile} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
-                <label className="block text-sm font-medium text-warm-700 mb-1.5">
+                <label htmlFor="settings-first-name" className="block text-sm font-medium text-warm-700 mb-1.5">
                   First Name
                 </label>
                 <input
                   type="text"
+                  id="settings-first-name"
+                  autoComplete="given-name"
                   value={firstName}
                   onChange={(e) => {
                     profileEditVersionRef.current += 1;
                     setFirstName(e.target.value);
                   }}
-                  className="w-full px-4 py-2.5 bg-cream border border-warm-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-400 focus:border-transparent text-warm-900 text-sm"
+                  className="w-full px-4 py-2.5 bg-cream border border-warm-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-700 focus:border-transparent text-warm-900 text-base sm:text-sm"
                   required
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-warm-700 mb-1.5">
+                <label htmlFor="settings-last-name" className="block text-sm font-medium text-warm-700 mb-1.5">
                   Last Name
                 </label>
                 <input
                   type="text"
+                  id="settings-last-name"
+                  autoComplete="family-name"
                   value={lastName}
                   onChange={(e) => {
                     profileEditVersionRef.current += 1;
                     setLastName(e.target.value);
                   }}
-                  className="w-full px-4 py-2.5 bg-cream border border-warm-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-400 focus:border-transparent text-warm-900 text-sm"
+                  className="w-full px-4 py-2.5 bg-cream border border-warm-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-700 focus:border-transparent text-warm-900 text-base sm:text-sm"
                   required
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-warm-700 mb-1.5">
+              <label htmlFor="settings-username" className="block text-sm font-medium text-warm-700 mb-1.5">
                 Username
               </label>
               <input
                 type="text"
+                id="settings-username"
+                autoComplete="username"
                 value={username}
                 onChange={(e) => {
                   profileEditVersionRef.current += 1;
                   setUsername(e.target.value);
                 }}
-                className="w-full px-4 py-2.5 bg-cream border border-warm-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-400 focus:border-transparent text-warm-900 text-sm"
+                className="w-full px-4 py-2.5 bg-cream border border-warm-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-700 focus:border-transparent text-warm-900 text-base sm:text-sm"
                 required
               />
             </div>
 
             {usernameChanged && (
               <div>
-                <label className="block text-sm font-medium text-warm-700 mb-1.5">
+                <label htmlFor="settings-username-password" className="block text-sm font-medium text-warm-700 mb-1.5">
                   Current Password
                 </label>
                 <div className="relative">
                   <input
                     type={showUsernamePassword ? "text" : "password"}
+                    id="settings-username-password"
+                    autoComplete="current-password"
+                    aria-describedby="settings-username-password-help"
                     value={usernamePassword}
                     onChange={(e) => setUsernamePassword(e.target.value)}
-                    className="w-full px-4 py-2.5 pr-11 bg-cream border border-warm-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-400 focus:border-transparent text-warm-900 text-sm"
+                    className="w-full px-4 py-2.5 pr-12 bg-cream border border-warm-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-700 focus:border-transparent text-warm-900 text-base sm:text-sm"
                     required
                   />
                   <button
@@ -383,7 +394,8 @@ export default function SettingsPage() {
                     onClick={() =>
                       setShowUsernamePassword(!showUsernamePassword)
                     }
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-warm-400 hover:text-warm-600"
+                    aria-label={showUsernamePassword ? "Hide current password" : "Show current password"}
+                    className="absolute right-1 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg text-warm-600 hover:bg-warm-100 hover:text-warm-800"
                   >
                     {showUsernamePassword ? (
                       <EyeOff className="w-4 h-4" />
@@ -392,7 +404,7 @@ export default function SettingsPage() {
                     )}
                   </button>
                 </div>
-                <p className="text-warm-400 text-xs mt-1">
+                <p id="settings-username-password-help" className="text-warm-600 text-xs mt-1">
                   Required because your username is used to sign in.
                 </p>
               </div>
@@ -400,6 +412,7 @@ export default function SettingsPage() {
 
             {profileMessage && (
               <motion.div
+                role={profileMessage.type === "error" ? "alert" : "status"}
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 className={`p-3 rounded-lg text-sm ${
@@ -425,7 +438,7 @@ export default function SettingsPage() {
       )}
 
       {/* Change Password */}
-      <div className="card-warm p-6 mb-8">
+      <div className="card-warm p-4 sm:p-6 mb-8">
         <div className="flex items-center gap-3 mb-6">
           <div className="w-10 h-10 bg-warm-200 rounded-lg flex items-center justify-center">
             <Lock className="w-5 h-5 text-warm-600" />
@@ -434,7 +447,7 @@ export default function SettingsPage() {
             <h2 className="font-serif text-lg font-bold text-warm-900">
               Change Password
             </h2>
-            <p className="text-warm-500 text-xs">
+            <p className="text-warm-600 text-xs">
               Enter your current password to set a new one
             </p>
           </div>
@@ -442,21 +455,24 @@ export default function SettingsPage() {
 
         <form onSubmit={changePassword} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-warm-700 mb-1.5">
+            <label htmlFor="settings-current-password" className="block text-sm font-medium text-warm-700 mb-1.5">
               Current Password
             </label>
             <div className="relative">
               <input
                 type={showCurrentPassword ? "text" : "password"}
+                id="settings-current-password"
+                autoComplete="current-password"
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
-                className="w-full px-4 py-2.5 bg-cream border border-warm-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-400 focus:border-transparent text-warm-900 text-sm pr-12"
+                className="w-full px-4 py-2.5 bg-cream border border-warm-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-700 focus:border-transparent text-warm-900 text-base sm:text-sm pr-12"
                 required
               />
               <button
                 type="button"
                 onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-warm-400 hover:text-warm-600"
+                aria-label={showCurrentPassword ? "Hide current password" : "Show current password"}
+                className="absolute right-1 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg text-warm-600 hover:bg-warm-100 hover:text-warm-800"
               >
                 {showCurrentPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
@@ -464,43 +480,53 @@ export default function SettingsPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-warm-700 mb-1.5">
+            <label htmlFor="settings-new-password" className="block text-sm font-medium text-warm-700 mb-1.5">
               New Password
             </label>
             <div className="relative">
               <input
                 type={showNewPassword ? "text" : "password"}
+                id="settings-new-password"
+                autoComplete="new-password"
+                aria-describedby="settings-new-password-help"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 placeholder="Min 10 chars, mixed case, number, symbol"
-                className="w-full px-4 py-2.5 bg-cream border border-warm-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-400 focus:border-transparent text-warm-900 placeholder-warm-300 text-sm pr-12"
+                className="w-full px-4 py-2.5 bg-cream border border-warm-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-700 focus:border-transparent text-warm-900 placeholder-warm-600 text-base sm:text-sm pr-12"
                 required
               />
               <button
                 type="button"
                 onClick={() => setShowNewPassword(!showNewPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-warm-400 hover:text-warm-600"
+                aria-label={showNewPassword ? "Hide new password" : "Show new password"}
+                className="absolute right-1 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg text-warm-600 hover:bg-warm-100 hover:text-warm-800"
               >
                 {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
+            <p id="settings-new-password-help" className="mt-1.5 text-xs text-warm-600">
+              Use at least 10 characters with uppercase, lowercase, a number, and a symbol.
+            </p>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-warm-700 mb-1.5">
+            <label htmlFor="settings-confirm-password" className="block text-sm font-medium text-warm-700 mb-1.5">
               Confirm New Password
             </label>
             <input
               type="password"
+              id="settings-confirm-password"
+              autoComplete="new-password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              className="w-full px-4 py-2.5 bg-cream border border-warm-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-400 focus:border-transparent text-warm-900 text-sm"
+              className="w-full px-4 py-2.5 bg-cream border border-warm-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-700 focus:border-transparent text-warm-900 text-base sm:text-sm"
               required
             />
           </div>
 
           {passwordMessage && (
             <motion.div
+              role={passwordMessage.type === "error" ? "alert" : "status"}
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               className={`p-3 rounded-lg text-sm ${
@@ -525,8 +551,8 @@ export default function SettingsPage() {
       </div>
 
       {/* Invite Tokens */}
-      <div className="card-warm p-6 mb-8">
-        <div className="flex items-center justify-between mb-6">
+      <div className="card-warm p-4 sm:p-6 mb-8">
+        <div className="mb-6 flex flex-col items-stretch gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-warm-200 rounded-lg flex items-center justify-center">
               <Key className="w-5 h-5 text-warm-600" />
@@ -535,7 +561,7 @@ export default function SettingsPage() {
               <h2 className="font-serif text-lg font-bold text-warm-900">
                 Invite Tokens
               </h2>
-              <p className="text-warm-500 text-xs">
+              <p className="text-warm-600 text-xs">
                 Share tokens to invite friends
               </p>
             </div>
@@ -543,7 +569,7 @@ export default function SettingsPage() {
           <button
             onClick={generateToken}
             disabled={generating}
-            className="flex items-center gap-2 bg-warm-700 text-cream px-4 py-2 rounded-lg text-sm font-medium hover:bg-warm-800 transition-colors disabled:opacity-50"
+            className="flex min-h-11 items-center justify-center gap-2 bg-warm-700 text-cream px-4 py-2 rounded-lg text-sm font-medium hover:bg-warm-800 transition-colors disabled:opacity-50"
           >
             <Plus className="w-4 h-4" />
             {generating ? "..." : "Generate"}
@@ -551,7 +577,7 @@ export default function SettingsPage() {
         </div>
 
         {tokensError && (
-          <div className="p-3 rounded-lg text-sm bg-red-50 border border-red-200 text-red-700 mb-4">
+          <div role="alert" className="p-3 rounded-lg text-sm bg-red-50 border border-red-200 text-red-700 mb-4">
             <p>{tokensError}</p>
             <button
               type="button"
@@ -564,22 +590,23 @@ export default function SettingsPage() {
         )}
 
         {inviteActionError && (
-          <div className="p-3 rounded-lg text-sm bg-red-50 border border-red-200 text-red-700 mb-4">
+          <div role="alert" className="p-3 rounded-lg text-sm bg-red-50 border border-red-200 text-red-700 mb-4">
             {inviteActionError}
           </div>
         )}
 
         {tokensLoading ? (
-          <div className="flex items-center justify-center py-8">
+          <div role="status" className="flex items-center justify-center gap-3 py-8 text-warm-700">
             <motion.div
               animate={{ rotate: 360 }}
               transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
             >
               <BookOpen className="w-6 h-6 text-warm-400" />
             </motion.div>
+            <span className="text-sm">Loading invite tokens...</span>
           </div>
         ) : tokensError && tokens.length === 0 ? null : tokens.length === 0 ? (
-          <p className="text-warm-400 text-sm text-center py-8 italic">
+          <p className="text-warm-600 text-sm text-center py-8 italic">
             No invite tokens yet. Generate one to invite friends!
           </p>
         ) : (
@@ -594,7 +621,7 @@ export default function SettingsPage() {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.05 }}
-                  className={`flex items-center gap-4 p-4 rounded-lg border ${
+                   className={`flex flex-col items-stretch gap-3 p-4 rounded-lg border sm:flex-row sm:items-center sm:gap-4 ${
                     isUsed
                       ? "bg-green-50/50 border-green-200"
                       : isExpired
@@ -602,7 +629,7 @@ export default function SettingsPage() {
                       : "bg-cream border-warm-200"
                   }`}
                 >
-                  <code className="font-mono text-lg font-bold tracking-widest text-warm-800 flex-shrink-0">
+                  <code className="font-mono text-lg font-bold tracking-widest text-warm-800">
                     {token.token}
                   </code>
 
@@ -613,12 +640,12 @@ export default function SettingsPage() {
                         Used
                       </div>
                     ) : isExpired ? (
-                      <div className="flex items-center gap-1.5 text-warm-400 text-xs">
+                      <div className="flex items-center gap-1.5 text-warm-700 text-xs">
                         <Clock className="w-3.5 h-3.5" />
                         Expired
                       </div>
                     ) : (
-                      <div className="flex items-center gap-1.5 text-warm-500 text-xs">
+                      <div className="flex items-center gap-1.5 text-warm-700 text-xs">
                         <Clock className="w-3.5 h-3.5" />
                         Expires{" "}
                         {new Date(token.expiresAt).toLocaleDateString()}
@@ -627,11 +654,11 @@ export default function SettingsPage() {
                   </div>
 
                   {!isUsed && !isExpired && (
-                    <div className="flex gap-1">
+                    <div className="flex w-full gap-2 sm:w-auto">
                       <button
                         onClick={() => void copyText(token.token, token.token)}
-                        className="p-2 rounded-lg text-warm-500 hover:bg-warm-100 transition-colors"
-                        title="Copy token"
+                        aria-label={copiedToken === token.token ? `Copied token ${token.token}` : `Copy token ${token.token}`}
+                        className="flex h-11 w-11 items-center justify-center rounded-lg text-warm-700 hover:bg-warm-100 transition-colors"
                       >
                         {copiedToken === token.token ? (
                           <Check className="w-4 h-4 text-green-600" />
@@ -641,7 +668,7 @@ export default function SettingsPage() {
                       </button>
                       <button
                         onClick={() => void copyInviteLink(token.token)}
-                        className="px-3 py-1.5 rounded-lg text-xs font-medium text-warm-600 hover:bg-warm-100 transition-colors border border-warm-200"
+                        className="min-h-11 flex-1 px-3 py-1.5 rounded-lg text-xs font-medium text-warm-700 hover:bg-warm-100 transition-colors border border-warm-500 sm:flex-none"
                       >
                         {copiedToken === token.token + "-link"
                           ? "Copied!"
@@ -654,6 +681,9 @@ export default function SettingsPage() {
             })}
           </div>
         )}
+        <p className="sr-only" role="status" aria-live="polite">
+          {copiedToken ? "Copied to clipboard" : ""}
+        </p>
       </div>
     </div>
   );

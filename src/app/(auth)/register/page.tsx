@@ -13,9 +13,12 @@ export default function RegisterPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-cream flex items-center justify-center">
-          <BookOpen className="w-8 h-8 text-warm-500 animate-spin" />
-        </div>
+        <main className="min-h-screen bg-cream flex items-center justify-center">
+          <div role="status" className="flex items-center gap-3 text-warm-700">
+            <BookOpen className="w-8 h-8 animate-spin" />
+            <span className="text-sm">Loading registration...</span>
+          </div>
+        </main>
       }
     >
       <RegisterForm />
@@ -69,7 +72,7 @@ function RegisterForm() {
   }
 
   return (
-    <div className="min-h-screen bg-cream flex items-center justify-center p-4">
+    <main className="min-h-screen bg-cream flex items-center justify-center p-4">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -88,49 +91,54 @@ function RegisterForm() {
           <h1 className="font-serif text-3xl font-bold text-warm-900">
             Join BookShare
           </h1>
-          <p className="text-warm-500 mt-1">Enter your invite to get started</p>
+          <p className="text-warm-600 mt-1">Enter your invite to get started</p>
         </div>
 
-        <div className="card-warm p-8">
+        <div className="card-warm p-5 sm:p-8">
           <form onSubmit={handleSubmit}>
             <div className="mb-4">
-              <label className="block text-sm font-medium text-warm-700 mb-1.5">
+              <label htmlFor="register-token" className="block text-sm font-medium text-warm-700 mb-1.5">
                 Invite Token
               </label>
               <input
                 type="text"
+                id="register-token"
                 value={inviteToken}
                 onChange={(e) => setInviteToken(e.target.value.toUpperCase())}
-                className="w-full px-4 py-2.5 bg-cream border border-warm-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-400 focus:border-transparent text-warm-900 placeholder-warm-300 font-mono tracking-widest text-center text-lg"
+                className="w-full px-4 py-2.5 bg-cream border border-warm-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-700 focus:border-transparent text-warm-900 placeholder-warm-600 font-mono tracking-widest text-center text-lg"
                 placeholder="ABCD1234"
                 maxLength={8}
                 required
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3 mb-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
               <div>
-                <label className="block text-sm font-medium text-warm-700 mb-1.5">
+                <label htmlFor="register-first-name" className="block text-sm font-medium text-warm-700 mb-1.5">
                   First Name
                 </label>
                 <input
                   type="text"
+                  id="register-first-name"
+                  autoComplete="given-name"
                   value={firstName}
                   onChange={(e) => setFirstName(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-cream border border-warm-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-400 focus:border-transparent text-warm-900 placeholder-warm-300"
+                  className="w-full px-4 py-2.5 bg-cream border border-warm-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-700 focus:border-transparent text-warm-900 placeholder-warm-600"
                   placeholder="Jane"
                   required
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-warm-700 mb-1.5">
+                <label htmlFor="register-last-name" className="block text-sm font-medium text-warm-700 mb-1.5">
                   Last Name
                 </label>
                 <input
                   type="text"
+                  id="register-last-name"
+                  autoComplete="family-name"
                   value={lastName}
                   onChange={(e) => setLastName(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-cream border border-warm-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-400 focus:border-transparent text-warm-900 placeholder-warm-300"
+                  className="w-full px-4 py-2.5 bg-cream border border-warm-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-700 focus:border-transparent text-warm-900 placeholder-warm-600"
                   placeholder="Doe"
                   required
                 />
@@ -138,36 +146,42 @@ function RegisterForm() {
             </div>
 
             <div className="mb-4">
-              <label className="block text-sm font-medium text-warm-700 mb-1.5">
+              <label htmlFor="register-username" className="block text-sm font-medium text-warm-700 mb-1.5">
                 Username
               </label>
               <input
                 type="text"
+                id="register-username"
+                autoComplete="username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="w-full px-4 py-2.5 bg-cream border border-warm-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-400 focus:border-transparent text-warm-900 placeholder-warm-300"
+                className="w-full px-4 py-2.5 bg-cream border border-warm-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-700 focus:border-transparent text-warm-900 placeholder-warm-600"
                 placeholder="janedoe"
                 required
               />
             </div>
 
             <div className="mb-6">
-              <label className="block text-sm font-medium text-warm-700 mb-1.5">
+              <label htmlFor="register-password" className="block text-sm font-medium text-warm-700 mb-1.5">
                 Password
               </label>
               <div className="relative">
                 <input
                   type={showPassword ? "text" : "password"}
+                  id="register-password"
+                  autoComplete="new-password"
+                  aria-describedby="register-password-help"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-cream border border-warm-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-400 focus:border-transparent text-warm-900 placeholder-warm-300 pr-12"
+                  className="w-full px-4 py-2.5 bg-cream border border-warm-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-700 focus:border-transparent text-warm-900 placeholder-warm-600 pr-12"
                   placeholder="Min 10 chars, mixed case, number, symbol"
                   required
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-warm-400 hover:text-warm-600"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  className="absolute right-1 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg text-warm-600 hover:bg-warm-100 hover:text-warm-800"
                 >
                   {showPassword ? (
                     <EyeOff className="w-5 h-5" />
@@ -176,13 +190,14 @@ function RegisterForm() {
                   )}
                 </button>
               </div>
-              <p className="text-xs text-warm-400 mt-1.5">
-                Uppercase, lowercase, number, and special character required
+              <p id="register-password-help" className="text-xs text-warm-600 mt-1.5">
+                Use at least 10 characters with uppercase, lowercase, a number, and a symbol.
               </p>
             </div>
 
             {error && (
               <motion.div
+                role="alert"
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm"
@@ -200,7 +215,7 @@ function RegisterForm() {
             </button>
           </form>
 
-          <p className="text-center mt-4 text-sm text-warm-500">
+          <p className="text-center mt-4 text-sm text-warm-600">
             Already have an account?{" "}
             <Link
               href="/login"
@@ -211,6 +226,6 @@ function RegisterForm() {
           </p>
         </div>
       </motion.div>
-    </div>
+    </main>
   );
 }
