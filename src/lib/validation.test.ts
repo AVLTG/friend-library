@@ -38,6 +38,9 @@ describe("strict schemas", () => {
     ).toBe(false);
     expect(updateBookSchema.safeParse({ rating: 4.7 }).success).toBe(false);
     expect(updateBookSchema.safeParse({ rating: 4.5 }).success).toBe(true);
+    expect(
+      updateBookSchema.safeParse({ read: true, currentlyReading: true }).success,
+    ).toBe(false);
   });
 
   it("allows current-password verification for username changes", () => {

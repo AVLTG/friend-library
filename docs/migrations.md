@@ -44,6 +44,23 @@ Before applying it to a current production clone and production itself:
 3. Confirm which user has the earliest `created_at`, with `id` as the deterministic tie-breaker. That user is backfilled as admin.
 4. Record row counts and create a fresh production backup.
 
-The migration fails before changing application tables if legacy foreign-key violations exist. It consolidates duplicate relationships deterministically, prefers currently-reading over read, normalizes boolean values, preserves the newest rating and review clearing state, normalizes invalid ratings to null, installs role/state/rating/invite checks, adds relationship uniqueness and lookup indexes, and enables relationship cascades. Google Books IDs and ISBNs remain non-unique until edition identity is defined in Phase 5.
+The migration fails before changing application tables if legacy foreign-key violations exist. It consolidates duplicate relationships deterministically, prefers currently-reading over read, normalizes boolean values, preserves the newest rating and review clearing state, normalizes invalid ratings to null, installs role/state/rating/invite checks, adds relationship uniqueness and lookup indexes, and enables relationship cascades. Google Books IDs and ISBNs remain non-unique until migration `0004`.
 
 After migration, repeat the row-count and foreign-key checks, verify exactly one existing admin, exercise member/admin deletion permissions, and smoke-test book creation plus invite generation before deployment.
+
+## API Correctness Migration
+
+Migration `0004_api-correctness` must be applied before deploying code that writes `book_google_ids` or relies on canonical ISBN uniqueness.
+
+Because the pre-`0004` application does not maintain Google alias rows or canonicalize every ISBN write, migration `0004` installs permanent `maintenance_0004_*` compatibility triggers that reject old-application user-data writes while leaving reads available. The marker is enabled when upgrading any initialized library and remains enabled after deployment. Phase 5+ writes temporarily clear and restore it inside their own transaction, so old immutable deployments and rollback targets remain blocked without creating a cross-connection write window. Fresh databases start with an empty marker and remain writable. Verify the marker and all 11 triggers before merging; do not drop them during normal rollout or rollback.
+
+Before applying it:
+
+1. Inventory exact and canonical ISBN collisions, duplicate Google Books IDs, blank reviews, and written reviews without ratings.
+2. Confirm all non-null legacy ISBNs have valid ISBN-10 or ISBN-13 checksums.
+3. Test the migration against a current Turso production clone and record row counts, alias counts, indexes, and `PRAGMA foreign_key_check` output.
+4. Create a fresh production backup.
+
+The migration converts valid ISBN-10 values to canonical ISBN-13, normalizes blank reviews to null, backfills every primary Google Books ID into the alias table, and adds partial unique indexes for canonical ISBNs and primary Google IDs. It fails closed and rolls back if an ISBN is invalid, canonical identities collide, or a written review lacks a rating.
+
+After migration, confirm row counts are unchanged, every existing Google Books ID has an alias row, all ISBNs are canonical, the three new indexes exist, no invalid review state remains, and the foreign-key check is clean. Then smoke-test new-edition creation, ISBN attachment, Google-alias attachment, identity-conflict rejection, and rating/review clearing before deployment.

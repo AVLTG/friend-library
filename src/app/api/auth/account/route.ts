@@ -16,12 +16,21 @@ import {
   parseJsonBody,
   RequestBodyError,
 } from "@/lib/validation";
+import {
+  apiError,
+  requestBodyErrorResponse,
+  withApiErrorBoundary,
+} from "@/lib/api-response";
+import { isSqliteUniqueConstraint } from "@/lib/db/errors";
+import { maintenanceTransaction } from "@/lib/db/maintenance-write";
+import { withSqliteBusyRetry } from "@/lib/db/transaction";
 
 // Get current user info
 export async function GET() {
+  return withApiErrorBoundary(async () => {
   const session = await getSession();
   if (!session) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return apiError("UNAUTHORIZED", "Unauthorized", 401);
   }
 
   const user = await db
@@ -37,10 +46,11 @@ export async function GET() {
     .get();
 
   if (!user) {
-    return NextResponse.json({ error: "User not found" }, { status: 404 });
+    return apiError("USER_NOT_FOUND", "User not found", 404);
   }
 
-  return NextResponse.json(user);
+    return NextResponse.json(user);
+  }, "Get account error", "Failed to load account");
 }
 
 // Update account details
@@ -48,7 +58,7 @@ export async function PATCH(request: Request) {
   try {
     const session = await getSession();
     if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return apiError("UNAUTHORIZED", "Unauthorized", 401);
     }
 
     const body = await parseJsonBody(request, accountUpdateSchema);
@@ -68,7 +78,7 @@ export async function PATCH(request: Request) {
       .get();
 
     if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      return apiError("USER_NOT_FOUND", "User not found", 404);
     }
 
     const usernameChanging =
@@ -82,19 +92,19 @@ export async function PATCH(request: Request) {
           PASSWORD_LIMIT,
         );
         if (!allowed) {
-          return NextResponse.json(
-            { error: "Too many password change attempts. Try again later." },
-            {
-              status: 429,
-              headers: { "Retry-After": String(Math.ceil(resetIn / 1000)) },
-            },
+          return apiError(
+            "RATE_LIMITED",
+            "Too many password change attempts. Try again later.",
+            429,
+            { "Retry-After": String(Math.ceil(resetIn / 1000)) },
           );
         }
       } catch (error) {
         console.error("Password rate limit error:", error);
-        return NextResponse.json(
-          { error: "Password changes are temporarily unavailable" },
-          { status: 503 },
+        return apiError(
+          "SERVICE_UNAVAILABLE",
+          "Password changes are temporarily unavailable",
+          503,
         );
       }
     }
@@ -103,38 +113,34 @@ export async function PATCH(request: Request) {
     let credentialsChanged = false;
 
     if (usernameChanging && !body.currentPassword) {
-      return NextResponse.json(
-        { error: "Current password is required to change username" },
-        { status: 400 },
+      return apiError(
+        "CURRENT_PASSWORD_REQUIRED",
+        "Current password is required to change username",
+        400,
       );
     }
 
     if (credentialsChanging && body.currentPassword) {
       const valid = await bcrypt.compare(body.currentPassword, user.passwordHash);
       if (!valid) {
-        return NextResponse.json(
-          { error: "Current password is incorrect" },
-          { status: 400 },
+        return apiError(
+          "CURRENT_PASSWORD_INCORRECT",
+          "Current password is incorrect",
+          400,
         );
       }
     }
 
     if (firstName !== undefined) {
       if (!firstName) {
-        return NextResponse.json(
-          { error: "First name cannot be empty" },
-          { status: 400 },
-        );
+        return apiError("INVALID_REQUEST", "First name cannot be empty", 400);
       }
       updates.firstName = firstName;
     }
 
     if (lastName !== undefined) {
       if (!lastName) {
-        return NextResponse.json(
-          { error: "Last name cannot be empty" },
-          { status: 400 },
-        );
+        return apiError("INVALID_REQUEST", "Last name cannot be empty", 400);
       }
       updates.lastName = lastName;
     }
@@ -147,10 +153,7 @@ export async function PATCH(request: Request) {
         .get();
 
       if (existing) {
-        return NextResponse.json(
-          { error: "Username already taken" },
-          { status: 400 },
-        );
+        return apiError("USERNAME_TAKEN", "Username already taken", 409);
       }
       updates.username = username;
       credentialsChanged = true;
@@ -159,7 +162,7 @@ export async function PATCH(request: Request) {
     if (body.newPassword) {
       const passwordError = validatePassword(body.newPassword);
       if (passwordError) {
-        return NextResponse.json({ error: passwordError }, { status: 400 });
+        return apiError("INVALID_PASSWORD", passwordError, 400);
       }
 
       updates.passwordHash = await bcrypt.hash(body.newPassword, 12);
@@ -167,22 +170,26 @@ export async function PATCH(request: Request) {
     }
 
     if (Object.keys(updates).length === 0) {
-      return NextResponse.json({ error: "No changes provided" }, { status: 400 });
+      return apiError("INVALID_REQUEST", "No changes provided", 400);
     }
 
     if (credentialsChanged) {
       updates.sessionVersion = sql`${users.sessionVersion} + 1`;
     }
 
-    const updatedUser = await db
-      .update(users)
-      .set(updates)
-      .where(eq(users.id, session.userId))
-      .returning({
-        username: users.username,
-        sessionVersion: users.sessionVersion,
-      })
-      .get();
+    const updatedUser = await withSqliteBusyRetry(() =>
+      maintenanceTransaction((tx) =>
+        tx
+          .update(users)
+          .set(updates)
+          .where(eq(users.id, session.userId))
+          .returning({
+            username: users.username,
+            sessionVersion: users.sessionVersion,
+          })
+          .get(),
+      ),
+    );
 
     const response = NextResponse.json({ success: true });
     if (credentialsChanged) {
@@ -197,12 +204,12 @@ export async function PATCH(request: Request) {
     return response;
   } catch (error) {
     if (error instanceof RequestBodyError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
+      return requestBodyErrorResponse(error);
+    }
+    if (isSqliteUniqueConstraint(error, ["users.username"])) {
+      return apiError("USERNAME_TAKEN", "Username already taken", 409);
     }
     console.error("Account update error:", error);
-    return NextResponse.json(
-      { error: "Something went wrong" },
-      { status: 500 },
-    );
+    return apiError("INTERNAL_ERROR", "Something went wrong", 500);
   }
 }

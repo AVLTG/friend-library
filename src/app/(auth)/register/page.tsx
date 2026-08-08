@@ -5,6 +5,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { BookOpen, Eye, EyeOff } from "lucide-react";
+import { apiErrorMessage, apiFetch } from "@/lib/api-client";
+
+type RegisterSuccessDto = { success: true };
 
 export default function RegisterPage() {
   return (
@@ -40,28 +43,26 @@ function RegisterForm() {
     setLoading(true);
 
     try {
-      const res = await fetch("/api/auth/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          username,
-          firstName,
-          lastName,
-          password,
-          inviteToken,
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error);
-        return;
-      }
+      await apiFetch<RegisterSuccessDto>(
+        "/api/auth/register",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            username,
+            firstName,
+            lastName,
+            password,
+            inviteToken,
+          }),
+        },
+        { redirectOnUnauthorized: false },
+      );
 
       router.push("/library");
       router.refresh();
-    } catch {
-      setError("Something went wrong");
+    } catch (error) {
+      setError(apiErrorMessage(error, "Unable to create your account"));
     } finally {
       setLoading(false);
     }

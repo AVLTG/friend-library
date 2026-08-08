@@ -1,16 +1,26 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { books, userBooks, users } from "@/lib/db/schema";
-import { eq, and } from "drizzle-orm";
-import { generateId } from "@/lib/auth";
+import { bookGoogleIds, books, userBooks, users } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 import { authorizeCurrentUser } from "@/lib/authorization";
+import {
+  apiError,
+  requestBodyErrorResponse,
+  withApiErrorBoundary,
+} from "@/lib/api-response";
+import { toBookDetailDto, toRelationshipDto } from "@/lib/book-dto";
 import { withSqliteBusyRetry } from "@/lib/db/transaction";
 import { sanitizeReview } from "@/lib/sanitize";
+import {
+  RelationshipBookNotFoundError,
+  updateRelationship,
+} from "@/lib/relationship-write";
+import { RelationshipStateError } from "@/lib/relationship-state";
+import { maintenanceTransaction } from "@/lib/db/maintenance-write";
 import {
   generatedIdSchema,
   parseJsonBody,
   RequestBodyError,
-  safeCoverUrl,
   updateBookSchema,
 } from "@/lib/validation";
 
@@ -18,23 +28,25 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  return withApiErrorBoundary(async () => {
   const authorization = await authorizeCurrentUser();
   if (!authorization.ok) {
-    return NextResponse.json(
-      { error: authorization.error },
-      { status: authorization.status },
+    return apiError(
+      authorization.status === 401 ? "UNAUTHORIZED" : "FORBIDDEN",
+      authorization.error,
+      authorization.status,
     );
   }
 
   const { id } = await params;
   if (!generatedIdSchema.safeParse(id).success) {
-    return NextResponse.json({ error: "Invalid book ID" }, { status: 400 });
+    return apiError("INVALID_BOOK_ID", "Invalid book ID", 400);
   }
 
   const book = await db.select().from(books).where(eq(books.id, id)).get();
 
   if (!book) {
-    return NextResponse.json({ error: "Book not found" }, { status: 404 });
+    return apiError("BOOK_NOT_FOUND", "Book not found", 404);
   }
 
   const bookUsers = await db
@@ -46,76 +58,22 @@ export async function GET(
     .innerJoin(users, eq(userBooks.userId, users.id))
     .where(eq(userBooks.bookId, book.id))
     .all();
+  const googleAliases = await db
+    .select({ googleBooksId: bookGoogleIds.googleBooksId })
+    .from(bookGoogleIds)
+    .where(eq(bookGoogleIds.bookId, book.id))
+    .all();
 
-  return NextResponse.json({
-    ...book,
-    coverUrl: safeCoverUrl(book.coverUrl),
-    authors: JSON.parse(book.authors),
-    categories: book.categories ? JSON.parse(book.categories) : [],
-    owners: bookUsers
-      .filter((ub) => ub.userBook.owned)
-      .map((ub) => ({
-        id: ub.user.id,
-        username: ub.user.username,
-        firstName: ub.user.firstName,
-        lastName: ub.user.lastName,
-        avatarColor: ub.user.avatarColor,
-      })),
-    readers: bookUsers
-      .filter((ub) => ub.userBook.read)
-      .map((ub) => ({
-        id: ub.user.id,
-        username: ub.user.username,
-        firstName: ub.user.firstName,
-        lastName: ub.user.lastName,
-        avatarColor: ub.user.avatarColor,
-      })),
-    annotators: bookUsers
-      .filter((ub) => ub.userBook.annotated)
-      .map((ub) => ({
-        id: ub.user.id,
-        username: ub.user.username,
-        firstName: ub.user.firstName,
-        lastName: ub.user.lastName,
-        avatarColor: ub.user.avatarColor,
-      })),
-    currentlyReading: bookUsers
-      .filter((ub) => ub.userBook.currentlyReading)
-      .map((ub) => ({
-        id: ub.user.id,
-        username: ub.user.username,
-        firstName: ub.user.firstName,
-        lastName: ub.user.lastName,
-        avatarColor: ub.user.avatarColor,
-      })),
-    ratings: bookUsers
-      .filter((ub) => ub.userBook.rating !== null)
-      .map((ub) => ({
-        userId: ub.user.id,
-        username: ub.user.username,
-        firstName: ub.user.firstName,
-        lastName: ub.user.lastName,
-        avatarColor: ub.user.avatarColor,
-        rating: ub.userBook.rating,
-        review: ub.userBook.review,
-        updatedAt: ub.userBook.updatedAt,
-      })),
-    averageRating:
-      bookUsers.filter((ub) => ub.userBook.rating !== null).length > 0
-        ? bookUsers
-            .filter((ub) => ub.userBook.rating !== null)
-            .reduce((sum, ub) => sum + (ub.userBook.rating || 0), 0) /
-          bookUsers.filter((ub) => ub.userBook.rating !== null).length
-        : null,
-    currentUserBook:
-      bookUsers.find((ub) => ub.user.id === authorization.user.id)?.userBook || null,
-    permissions: {
-      canDeleteGlobally: authorization.user.role === "admin",
-      canRemoveRelationship: bookUsers.some(
-        (ub) => ub.user.id === authorization.user.id,
-      ),
-    },
-  });
+    return NextResponse.json(
+    toBookDetailDto(
+      book,
+      bookUsers,
+      authorization.user.id,
+      authorization.user.role === "admin",
+      googleAliases.map((alias) => alias.googleBooksId),
+    ),
+    );
+  }, "Get book error", "Failed to load book");
 }
 
 // Update user's relationship with a book
@@ -123,17 +81,19 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  return withApiErrorBoundary(async () => {
   const authorization = await authorizeCurrentUser();
   if (!authorization.ok) {
-    return NextResponse.json(
-      { error: authorization.error },
-      { status: authorization.status },
+    return apiError(
+      authorization.status === 401 ? "UNAUTHORIZED" : "FORBIDDEN",
+      authorization.error,
+      authorization.status,
     );
   }
 
   const { id } = await params;
   if (!generatedIdSchema.safeParse(id).success) {
-    return NextResponse.json({ error: "Invalid book ID" }, { status: 400 });
+    return apiError("INVALID_BOOK_ID", "Invalid book ID", 400);
   }
 
   let body;
@@ -141,7 +101,7 @@ export async function PATCH(
     body = await parseJsonBody(request, updateBookSchema, 8_192);
   } catch (error) {
     if (error instanceof RequestBodyError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
+      return requestBodyErrorResponse(error);
     }
     throw error;
   }
@@ -154,58 +114,26 @@ export async function PATCH(
         ? sanitizeReview(body.review)
         : undefined;
 
-  const book = await db.select().from(books).where(eq(books.id, id)).get();
-  if (!book) {
-    return NextResponse.json({ error: "Book not found" }, { status: 404 });
-  }
-
-  const updates: Partial<typeof userBooks.$inferInsert> = { updatedAt: new Date() };
-  if (owned !== undefined) updates.owned = owned;
-  if (annotated !== undefined) updates.annotated = annotated;
-  if (rating !== undefined) updates.rating = rating;
-  if (review !== undefined) updates.review = review;
-
-  if (currentlyReading !== undefined) {
-    updates.currentlyReading = currentlyReading;
-    if (currentlyReading) updates.read = false;
-  }
-  if (read !== undefined) {
-    updates.read = read;
-    if (read) updates.currentlyReading = false;
-  }
-
-  const initialRead = read ?? false;
-  const initialCurrentlyReading = initialRead ? false : (currentlyReading ?? false);
-  await db
-    .insert(userBooks)
-    .values({
-      id: generateId(),
-      userId: authorization.user.id,
-      bookId: id,
-      owned: owned ?? false,
-      read: initialRead,
-      currentlyReading: initialCurrentlyReading,
-      annotated: annotated ?? false,
-      rating: rating ?? null,
-      review: review ?? null,
-    })
-    .onConflictDoUpdate({
-      target: [userBooks.userId, userBooks.bookId],
-      set: updates,
+  try {
+    const userBook = await updateRelationship(authorization.user.id, id, {
+      owned,
+      read,
+      currentlyReading,
+      annotated,
+      rating,
+      review,
     });
-
-  const userBook = await db
-    .select()
-    .from(userBooks)
-    .where(
-      and(
-        eq(userBooks.userId, authorization.user.id),
-        eq(userBooks.bookId, id),
-      ),
-    )
-    .get();
-
-  return NextResponse.json(userBook);
+    return NextResponse.json(toRelationshipDto(userBook));
+  } catch (error) {
+    if (error instanceof RelationshipBookNotFoundError) {
+      return apiError("BOOK_NOT_FOUND", "Book not found", 404);
+    }
+    if (error instanceof RelationshipStateError) {
+      return apiError(error.code, error.message, 400);
+    }
+    throw error;
+  }
+  }, "Update book relationship error", "Failed to update book activity");
 }
 
 // Delete a book from the shared library
@@ -213,21 +141,23 @@ export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  return withApiErrorBoundary(async () => {
   const authorization = await authorizeCurrentUser("admin");
   if (!authorization.ok) {
-    return NextResponse.json(
-      { error: authorization.error },
-      { status: authorization.status },
+    return apiError(
+      authorization.status === 401 ? "UNAUTHORIZED" : "FORBIDDEN",
+      authorization.error,
+      authorization.status,
     );
   }
 
   const { id } = await params;
   if (!generatedIdSchema.safeParse(id).success) {
-    return NextResponse.json({ error: "Invalid book ID" }, { status: 400 });
+    return apiError("INVALID_BOOK_ID", "Invalid book ID", 400);
   }
 
   const deletedBook = await withSqliteBusyRetry(() =>
-    db.transaction((tx) =>
+    maintenanceTransaction((tx) =>
       tx
         .delete(books)
         .where(eq(books.id, id))
@@ -236,8 +166,9 @@ export async function DELETE(
     ),
   );
   if (!deletedBook) {
-    return NextResponse.json({ error: "Book not found" }, { status: 404 });
+    return apiError("BOOK_NOT_FOUND", "Book not found", 404);
   }
 
-  return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true });
+  }, "Delete book error", "Failed to delete book");
 }

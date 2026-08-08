@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
+import { ApiError, apiErrorMessage, apiFetch } from "@/lib/api-client";
 import {
   BookOpen,
   Library,
@@ -31,11 +32,35 @@ export default function MainLayout({
   const pathname = usePathname();
   const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [logoutPending, setLogoutPending] = useState(false);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
+  const logoutRequestRef = useRef(false);
 
   async function handleLogout() {
-    await fetch("/api/auth/logout", { method: "POST" });
-    router.push("/login");
-    router.refresh();
+    if (logoutRequestRef.current) return;
+    logoutRequestRef.current = true;
+    setLogoutPending(true);
+    setLogoutError(null);
+
+    try {
+      await apiFetch<{ success: true }>(
+        "/api/auth/logout",
+        { method: "POST" },
+        { redirectOnUnauthorized: false },
+      );
+      router.push("/login");
+      router.refresh();
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        router.push("/login");
+        router.refresh();
+        return;
+      }
+      setLogoutError(apiErrorMessage(error, "Unable to sign out"));
+    } finally {
+      logoutRequestRef.current = false;
+      setLogoutPending(false);
+    }
   }
 
   return (
@@ -94,7 +119,9 @@ export default function MainLayout({
               </Link>
               <button
                 onClick={handleLogout}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg text-warm-300 hover:text-cream hover:bg-warm-700/50 transition-colors text-sm"
+                disabled={logoutPending}
+                aria-label={logoutPending ? "Signing out" : "Sign out"}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg text-warm-300 hover:text-cream hover:bg-warm-700/50 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <LogOut className="w-4 h-4" />
               </button>
@@ -113,6 +140,15 @@ export default function MainLayout({
             </button>
           </div>
         </div>
+
+        {logoutError && (
+          <div
+            role="alert"
+            className="max-w-7xl mx-auto px-4 sm:px-6 pb-3 text-xs text-red-100"
+          >
+            {logoutError}. Please try again.
+          </div>
+        )}
 
         {/* Mobile Menu */}
         <AnimatePresence>
@@ -150,10 +186,11 @@ export default function MainLayout({
                 </Link>
                 <button
                   onClick={handleLogout}
-                  className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-warm-300 hover:text-cream hover:bg-warm-700/50 transition-colors w-full"
+                  disabled={logoutPending}
+                  className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-warm-300 hover:text-cream hover:bg-warm-700/50 transition-colors w-full disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <LogOut className="w-5 h-5" />
-                  Sign Out
+                  {logoutPending ? "Signing Out..." : "Sign Out"}
                 </button>
               </div>
             </motion.div>

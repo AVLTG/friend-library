@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
+import { useState, useEffect, use, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
@@ -19,70 +19,15 @@ import {
   BookMarked,
 } from "lucide-react";
 import StarRating from "@/components/StarRating";
+import { ApiError, apiErrorMessage, apiFetch } from "@/lib/api-client";
+import type { BookDetailDto, RelationshipDto } from "@/lib/api-types";
 
-interface BookDetail {
-  id: string;
-  title: string;
-  authors: string[];
-  description?: string;
-  coverUrl?: string;
-  isbn?: string;
-  pageCount?: number;
-  publishedDate?: string;
-  categories: string[];
-  spineColor: string;
-  averageRating: number | null;
-  owners: Array<{
-    id: string;
-    username: string;
-    firstName: string;
-    lastName: string;
-    avatarColor: string;
-  }>;
-  readers: Array<{
-    id: string;
-    username: string;
-    firstName: string;
-    lastName: string;
-    avatarColor: string;
-  }>;
-  annotators: Array<{
-    id: string;
-    username: string;
-    firstName: string;
-    lastName: string;
-    avatarColor: string;
-  }>;
-  currentlyReading: Array<{
-    id: string;
-    username: string;
-    firstName: string;
-    lastName: string;
-    avatarColor: string;
-  }>;
-  ratings: Array<{
-    userId: string;
-    username: string;
-    firstName: string;
-    lastName: string;
-    avatarColor: string;
-    rating: number;
-    review?: string;
-    updatedAt: string;
-  }>;
-  currentUserBook: {
-    owned: boolean;
-    read: boolean;
-    currentlyReading: boolean;
-    annotated: boolean;
-    rating: number | null;
-    review: string | null;
-  } | null;
-  permissions: {
-    canDeleteGlobally: boolean;
-    canRemoveRelationship: boolean;
-  };
-}
+type RelationshipMutation = "status" | "review" | "clear" | "remove";
+
+type Feedback = {
+  type: "success" | "error";
+  message: string;
+};
 
 export default function BookDetailPage({
   params,
@@ -91,113 +36,335 @@ export default function BookDetailPage({
 }) {
   const { id } = use(params);
   const router = useRouter();
-  const [book, setBook] = useState<BookDetail | null>(null);
+  const routeIdRef = useRef(id);
+  routeIdRef.current = id;
+  const requestSequenceRef = useRef(0);
+  const activeRequestRef = useRef<AbortController | null>(null);
+  const relationshipPendingRef = useRef<RelationshipMutation | null>(null);
+  const [book, setBook] = useState<BookDetailDto | null>(null);
   const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [showReviewForm, setShowReviewForm] = useState(false);
   const [reviewText, setReviewText] = useState("");
   const [reviewRating, setReviewRating] = useState<number | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [relationshipPending, setRelationshipPending] =
+    useState<RelationshipMutation | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
-  const [removing, setRemoving] = useState(false);
 
   useEffect(() => {
-    fetchBook();
-  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+    routeIdRef.current = id;
+    setBook(null);
+    setLoading(true);
+    setNotFound(false);
+    setLoadError(null);
+    setFeedback(null);
+    setShowReviewForm(false);
+    setReviewText("");
+    setReviewRating(null);
+    setShowDeleteConfirm(false);
+    setShowRemoveConfirm(false);
+    void fetchBook(id, true, true);
 
-  async function fetchBook() {
+    return () => {
+      activeRequestRef.current?.abort();
+      requestSequenceRef.current += 1;
+    };
+  }, [id]);
+
+  async function fetchBook(
+    requestedId: string,
+    initializeDraft = false,
+    showLoading = false,
+  ) {
+    if (routeIdRef.current !== requestedId) return null;
+
+    activeRequestRef.current?.abort();
+    const controller = new AbortController();
+    const sequence = ++requestSequenceRef.current;
+    activeRequestRef.current = controller;
+    if (showLoading) setLoading(true);
+    setLoadError(null);
+
     try {
-      const res = await fetch(`/api/books/${id}`);
-      if (res.ok) {
-        const data = await res.json();
-        setBook(data);
-        if (data.currentUserBook) {
-          setReviewText(data.currentUserBook.review || "");
-          setReviewRating(data.currentUserBook.rating);
-        }
+      const data = await apiFetch<BookDetailDto>(`/api/books/${requestedId}`, {
+        signal: controller.signal,
+      });
+      if (
+        sequence !== requestSequenceRef.current ||
+        routeIdRef.current !== requestedId
+      ) {
+        return null;
       }
+
+      setBook(data);
+      setNotFound(false);
+      if (initializeDraft) {
+        setReviewText(data.currentUserBook?.review ?? "");
+        setReviewRating(data.currentUserBook?.rating ?? null);
+      }
+      return data;
     } catch (error) {
-      console.error("Failed to fetch book:", error);
+      if (error instanceof DOMException && error.name === "AbortError") {
+        return null;
+      }
+      if (
+        sequence !== requestSequenceRef.current ||
+        routeIdRef.current !== requestedId
+      ) {
+        return null;
+      }
+
+      if (error instanceof ApiError && error.status === 404) {
+        setBook(null);
+        setNotFound(true);
+        setLoadError(null);
+      } else {
+        setLoadError(apiErrorMessage(error, "Unable to load this book"));
+      }
+      return null;
     } finally {
-      setLoading(false);
+      if (
+        sequence === requestSequenceRef.current &&
+        routeIdRef.current === requestedId
+      ) {
+        activeRequestRef.current = null;
+        setLoading(false);
+      }
     }
   }
 
-  async function toggleStatus(field: "owned" | "read" | "currentlyReading" | "annotated") {
+  function beginRelationshipMutation(kind: RelationshipMutation) {
+    if (relationshipPendingRef.current || deleting) return false;
+    relationshipPendingRef.current = kind;
+    setRelationshipPending(kind);
+    setFeedback(null);
+    return true;
+  }
+
+  function finishRelationshipMutation() {
+    relationshipPendingRef.current = null;
+    setRelationshipPending(null);
+  }
+
+  function applyRelationship(
+    requestedId: string,
+    relationship: RelationshipDto,
+  ) {
+    if (routeIdRef.current !== requestedId) return;
+    setBook((currentBook) =>
+      currentBook?.id === requestedId
+        ? {
+            ...currentBook,
+            currentUserBook: relationship,
+            permissions: {
+              ...currentBook.permissions,
+              canRemoveRelationship: true,
+            },
+          }
+        : currentBook,
+    );
+  }
+
+  function mutationError(error: unknown, fallback: string) {
+    const message = apiErrorMessage(error, fallback);
+    return error instanceof ApiError && error.status === 404
+      ? `${message}. Return to the library and choose another book.`
+      : `${message}. Please try again.`;
+  }
+
+  async function toggleStatus(
+    field: "owned" | "read" | "currentlyReading" | "annotated",
+  ) {
     if (!book) return;
+    if (!beginRelationshipMutation("status")) return;
+
+    const requestedId = id;
     const current = book.currentUserBook?.[field] ?? false;
+    const next = !current;
+    const statusLabels = {
+      owned: "ownership",
+      read: "read status",
+      currentlyReading: "reading status",
+      annotated: "annotation status",
+    } as const;
 
     try {
-      await fetch(`/api/books/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ [field]: !current }),
+      const relationship = await apiFetch<RelationshipDto>(
+        `/api/books/${requestedId}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ [field]: next }),
+        },
+      );
+      if (routeIdRef.current !== requestedId) return;
+      applyRelationship(requestedId, relationship);
+      setFeedback({
+        type: "success",
+        message: `${statusLabels[field][0].toUpperCase()}${statusLabels[field].slice(1)} updated.`,
       });
-      fetchBook();
+      await fetchBook(requestedId);
     } catch (error) {
-      console.error("Failed to update:", error);
+      if (routeIdRef.current === requestedId) {
+        setFeedback({
+          type: "error",
+          message: mutationError(error, `Unable to update ${statusLabels[field]}`),
+        });
+      }
+    } finally {
+      finishRelationshipMutation();
     }
   }
 
   async function submitReview() {
-    setSaving(true);
-    try {
-      const response = await fetch(`/api/books/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rating: reviewRating, review: reviewText }),
+    if (reviewText.trim() && reviewRating === null) {
+      setFeedback({
+        type: "error",
+        message: "Choose a rating before saving a written review.",
       });
-      if (!response.ok) {
-        const data = await response.json().catch(() => null);
-        throw new Error(data?.error || "Failed to submit review");
-      }
+      return;
+    }
+    if (reviewRating === null || !beginRelationshipMutation("review")) return;
+
+    const requestedId = id;
+    try {
+      const relationship = await apiFetch<RelationshipDto>(
+        `/api/books/${requestedId}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rating: reviewRating, review: reviewText }),
+        },
+      );
+      if (routeIdRef.current !== requestedId) return;
+      applyRelationship(requestedId, relationship);
+      setReviewText(relationship.review ?? "");
+      setReviewRating(relationship.rating);
       setShowReviewForm(false);
-      fetchBook();
+      setFeedback({ type: "success", message: "Rating and review saved." });
+      await fetchBook(requestedId);
     } catch (error) {
-      console.error("Failed to submit review:", error);
+      if (routeIdRef.current === requestedId) {
+        setFeedback({
+          type: "error",
+          message: mutationError(error, "Unable to save your rating and review"),
+        });
+      }
     } finally {
-      setSaving(false);
+      finishRelationshipMutation();
+    }
+  }
+
+  async function clearReview() {
+    if (!beginRelationshipMutation("clear")) return;
+
+    const requestedId = id;
+    try {
+      const relationship = await apiFetch<RelationshipDto>(
+        `/api/books/${requestedId}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rating: null, review: null }),
+        },
+      );
+      if (routeIdRef.current !== requestedId) return;
+      applyRelationship(requestedId, relationship);
+      setReviewText("");
+      setReviewRating(null);
+      setFeedback({ type: "success", message: "Rating and review cleared." });
+      await fetchBook(requestedId);
+    } catch (error) {
+      if (routeIdRef.current === requestedId) {
+        setFeedback({
+          type: "error",
+          message: mutationError(error, "Unable to clear your rating and review"),
+        });
+      }
+    } finally {
+      finishRelationshipMutation();
     }
   }
 
   async function deleteBook() {
+    if (deleting || relationshipPendingRef.current) return;
+    const requestedId = id;
     setDeleting(true);
+    setFeedback(null);
     try {
-      const res = await fetch(`/api/books/${id}`, { method: "DELETE" });
-      if (res.ok) {
+      await apiFetch<{ success: true }>(`/api/books/${requestedId}`, {
+        method: "DELETE",
+      });
+      if (routeIdRef.current === requestedId) {
+        setFeedback({
+          type: "success",
+          message: "Book deleted. Returning to the library...",
+        });
+        await new Promise((resolve) => window.setTimeout(resolve, 600));
+      }
+      if (routeIdRef.current === requestedId) {
         router.push("/library");
+      } else {
+        setDeleting(false);
       }
     } catch (error) {
-      console.error("Failed to delete:", error);
-    } finally {
+      if (routeIdRef.current === requestedId) {
+        setFeedback({
+          type: "error",
+          message: mutationError(error, "Unable to delete this book"),
+        });
+      }
       setDeleting(false);
     }
   }
 
   async function removeRelationship() {
-    setRemoving(true);
+    if (!beginRelationshipMutation("remove")) return;
+
+    const requestedId = id;
     try {
-      const res = await fetch(`/api/books/${id}/relationship`, {
-        method: "DELETE",
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        throw new Error(data?.error || "Failed to remove your book activity");
-      }
-      setShowRemoveConfirm(false);
+      await apiFetch<{ success: true }>(
+        `/api/books/${requestedId}/relationship`,
+        { method: "DELETE" },
+      );
+      if (routeIdRef.current !== requestedId) return;
+      setBook((currentBook) =>
+        currentBook?.id === requestedId
+          ? {
+              ...currentBook,
+              currentUserBook: null,
+              permissions: {
+                ...currentBook.permissions,
+                canRemoveRelationship: false,
+              },
+            }
+          : currentBook,
+      );
       setShowReviewForm(false);
       setReviewText("");
       setReviewRating(null);
-      await fetchBook();
+      setFeedback({ type: "success", message: "Your activity was removed." });
+      await fetchBook(requestedId);
+      if (routeIdRef.current === requestedId) {
+        setShowRemoveConfirm(false);
+      }
     } catch (error) {
-      console.error("Failed to remove relationship:", error);
+      if (routeIdRef.current === requestedId) {
+        setFeedback({
+          type: "error",
+          message: mutationError(error, "Unable to remove your activity"),
+        });
+      }
     } finally {
-      setRemoving(false);
+      finishRelationshipMutation();
     }
   }
 
-  if (loading) {
+  if (loading || (book !== null && book.id !== id)) {
     return (
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-12">
         <div className="flex items-center justify-center h-[400px]">
@@ -212,7 +379,7 @@ export default function BookDetailPage({
     );
   }
 
-  if (!book) {
+  if (notFound) {
     return (
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-12 text-center">
         <p className="text-warm-500">Book not found</p>
@@ -226,7 +393,33 @@ export default function BookDetailPage({
     );
   }
 
+  if (!book) {
+    return (
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-12 text-center">
+        <p className="font-medium text-warm-800">Unable to load this book</p>
+        <p className="mt-2 text-sm text-warm-500">
+          {loadError ?? "BookShare could not complete the request."}
+        </p>
+        <div className="mt-4 flex justify-center gap-4">
+          <button
+            onClick={() => void fetchBook(id, true, true)}
+            className="text-warm-700 hover:underline"
+          >
+            Try again
+          </button>
+          <button
+            onClick={() => router.back()}
+            className="text-warm-500 hover:underline"
+          >
+            Go back
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const userBook = book.currentUserBook;
+  const relationshipLocked = relationshipPending !== null || deleting;
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
@@ -238,6 +431,34 @@ export default function BookDetailPage({
         <ArrowLeft className="w-4 h-4" />
         Back to library
       </button>
+
+      {loadError && (
+        <div
+          role="alert"
+          className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+        >
+          <span>{loadError}. The displayed details may be out of date.</span>
+          <button
+            onClick={() => void fetchBook(id)}
+            className="font-medium underline hover:text-red-800"
+          >
+            Retry refresh
+          </button>
+        </div>
+      )}
+
+      {feedback && (
+        <div
+          role={feedback.type === "error" ? "alert" : "status"}
+          className={`mb-4 rounded-lg border px-4 py-3 text-sm ${
+            feedback.type === "error"
+              ? "border-red-200 bg-red-50 text-red-700"
+              : "border-green-200 bg-green-50 text-green-700"
+          }`}
+        >
+          {feedback.message}
+        </div>
+      )}
 
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -347,28 +568,33 @@ export default function BookDetailPage({
                 icon={<BookOpen className="w-4 h-4" />}
                 label="I own this"
                 onClick={() => toggleStatus("owned")}
+                disabled={relationshipLocked}
               />
               <StatusButton
                 active={userBook?.currentlyReading ?? false}
                 icon={<BookMarked className="w-4 h-4" />}
                 label="Currently reading"
                 onClick={() => toggleStatus("currentlyReading")}
+                disabled={relationshipLocked}
               />
               <StatusButton
                 active={userBook?.read ?? false}
                 icon={<Eye className="w-4 h-4" />}
                 label="I've read this"
                 onClick={() => toggleStatus("read")}
+                disabled={relationshipLocked}
               />
               <StatusButton
                 active={userBook?.annotated ?? false}
                 icon={<PenLine className="w-4 h-4" />}
                 label="I've annotated this"
                 onClick={() => toggleStatus("annotated")}
+                disabled={relationshipLocked}
               />
               <button
                 onClick={() => setShowReviewForm(!showReviewForm)}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg border border-amber-300 text-amber-700 hover:bg-amber-50 transition-colors text-sm font-medium"
+                disabled={relationshipLocked}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg border border-amber-300 text-amber-700 hover:bg-amber-50 transition-colors text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Star className="w-4 h-4" />
                 {userBook?.rating ? "Edit Review" : "Rate & Review"}
@@ -378,7 +604,8 @@ export default function BookDetailPage({
               {book.permissions.canRemoveRelationship && (
                 <button
                   onClick={() => setShowRemoveConfirm(true)}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-warm-500 hover:text-warm-700 hover:bg-warm-100 transition-colors text-xs"
+                  disabled={relationshipLocked}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-warm-500 hover:text-warm-700 hover:bg-warm-100 transition-colors text-xs disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <X className="w-3.5 h-3.5" />
                   Remove my activity
@@ -387,7 +614,8 @@ export default function BookDetailPage({
               {book.permissions.canDeleteGlobally && (
                 <button
                   onClick={() => setShowDeleteConfirm(true)}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors text-xs"
+                  disabled={relationshipLocked}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors text-xs disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                   Delete from shared library
@@ -413,15 +641,18 @@ export default function BookDetailPage({
                     <div className="flex gap-2">
                       <button
                         onClick={removeRelationship}
-                        disabled={removing}
+                        disabled={relationshipLocked}
                         className="flex items-center gap-2 px-4 py-2 bg-warm-700 text-white rounded-lg text-sm font-medium hover:bg-warm-800 transition-colors disabled:opacity-50"
                       >
                         <X className="w-3.5 h-3.5" />
-                        {removing ? "Removing..." : "Remove my activity"}
+                        {relationshipPending === "remove"
+                          ? "Removing..."
+                          : "Remove my activity"}
                       </button>
                       <button
                         onClick={() => setShowRemoveConfirm(false)}
-                        className="px-4 py-2 text-warm-600 hover:bg-warm-100 rounded-lg text-sm font-medium transition-colors"
+                        disabled={relationshipLocked}
+                        className="px-4 py-2 text-warm-600 hover:bg-warm-100 rounded-lg text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         Cancel
                       </button>
@@ -450,7 +681,7 @@ export default function BookDetailPage({
                     <div className="flex gap-2">
                       <button
                         onClick={deleteBook}
-                        disabled={deleting}
+                        disabled={deleting || relationshipPending !== null}
                         className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-50"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -458,7 +689,8 @@ export default function BookDetailPage({
                       </button>
                       <button
                         onClick={() => setShowDeleteConfirm(false)}
-                        className="px-4 py-2 text-warm-600 hover:bg-warm-100 rounded-lg text-sm font-medium transition-colors"
+                        disabled={deleting}
+                        className="px-4 py-2 text-warm-600 hover:bg-warm-100 rounded-lg text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         Cancel
                       </button>
@@ -486,7 +718,8 @@ export default function BookDetailPage({
                   </h3>
                   <button
                     onClick={() => setShowReviewForm(false)}
-                    className="text-warm-400 hover:text-warm-600"
+                    disabled={relationshipLocked}
+                    className="text-warm-400 hover:text-warm-600 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <X className="w-5 h-5" />
                   </button>
@@ -496,11 +729,14 @@ export default function BookDetailPage({
                   <label className="block text-sm font-medium text-warm-700 mb-2">
                     Rating
                   </label>
-                  <StarRating
-                    value={reviewRating}
-                    onChange={setReviewRating}
-                    size="lg"
-                  />
+                  <div className={relationshipLocked ? "opacity-50" : undefined}>
+                    <StarRating
+                      value={reviewRating}
+                      onChange={setReviewRating}
+                      readonly={relationshipLocked}
+                      size="lg"
+                    />
+                  </div>
                 </div>
 
                 <div className="mb-4">
@@ -510,20 +746,43 @@ export default function BookDetailPage({
                   <textarea
                     value={reviewText}
                     onChange={(e) => setReviewText(e.target.value)}
+                    disabled={relationshipLocked}
                     rows={4}
                     maxLength={5000}
-                    className="w-full px-4 py-3 bg-cream border border-warm-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-400 focus:border-transparent text-warm-900 placeholder-warm-400 resize-none text-sm"
+                    className="w-full px-4 py-3 bg-cream border border-warm-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-400 focus:border-transparent text-warm-900 placeholder-warm-400 resize-none text-sm disabled:cursor-not-allowed disabled:opacity-50"
                     placeholder="What did you think of this book?"
                   />
                 </div>
 
-                <button
-                  onClick={submitReview}
-                  disabled={saving || !reviewRating}
-                  className="bg-warm-700 text-cream px-6 py-2.5 rounded-lg font-medium hover:bg-warm-800 transition-colors disabled:opacity-50 text-sm"
-                >
-                  {saving ? "Saving..." : "Save Review"}
-                </button>
+                {reviewText.trim() && reviewRating === null && (
+                  <p className="mb-3 text-sm text-red-600" role="alert">
+                    Choose a rating before saving a written review.
+                  </p>
+                )}
+
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    onClick={submitReview}
+                    disabled={relationshipLocked || reviewRating === null}
+                    className="bg-warm-700 text-cream px-6 py-2.5 rounded-lg font-medium hover:bg-warm-800 transition-colors disabled:opacity-50 text-sm"
+                  >
+                    {relationshipPending === "review"
+                      ? "Saving..."
+                      : "Save Review"}
+                  </button>
+                  {userBook &&
+                    (userBook.rating !== null || userBook.review !== null) && (
+                      <button
+                        onClick={clearReview}
+                        disabled={relationshipLocked}
+                        className="px-4 py-2.5 rounded-lg border border-warm-200 text-warm-600 hover:bg-warm-100 transition-colors disabled:cursor-not-allowed disabled:opacity-50 text-sm font-medium"
+                      >
+                        {relationshipPending === "clear"
+                          ? "Clearing..."
+                          : "Clear rating & review"}
+                      </button>
+                    )}
+                </div>
               </div>
             </motion.div>
           )}
@@ -574,20 +833,20 @@ export default function BookDetailPage({
             <div className="space-y-4">
               {book.ratings.map((r) => (
                 <div
-                  key={r.userId}
+                  key={r.user.id}
                   className="flex gap-4 pb-4 border-b border-warm-100 last:border-0 last:pb-0"
                 >
                   <div
                     className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
-                    style={{ backgroundColor: r.avatarColor }}
+                    style={{ backgroundColor: r.user.avatarColor }}
                   >
-                    {r.firstName[0]}
-                    {r.lastName[0]}
+                    {r.user.firstName[0]}
+                    {r.user.lastName[0]}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="font-medium text-warm-900 text-sm">
-                        {r.firstName} {r.lastName}
+                        {r.user.firstName} {r.user.lastName}
                       </span>
                       <StarRating value={r.rating} readonly size="sm" />
                     </div>
@@ -612,16 +871,19 @@ function StatusButton({
   icon,
   label,
   onClick,
+  disabled,
 }: {
   active: boolean;
   icon: React.ReactNode;
   label: string;
   onClick: () => void;
+  disabled: boolean;
 }) {
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium transition-all ${
+      disabled={disabled}
+      className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium transition-all disabled:cursor-not-allowed disabled:opacity-50 ${
         active
           ? "bg-warm-700 text-cream border-warm-700"
           : "bg-warm-50 text-warm-600 border-warm-200 hover:bg-warm-100"

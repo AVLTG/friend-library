@@ -2,11 +2,13 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import { getSession } from "@/lib/auth";
+import { apiError, withApiErrorBoundary } from "@/lib/api-response";
 
 export async function GET() {
+  return withApiErrorBoundary(async () => {
   const session = await getSession();
   if (!session) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return apiError("UNAUTHORIZED", "Unauthorized", 401);
   }
 
   const allUsers = await db
@@ -20,5 +22,6 @@ export async function GET() {
     .from(users)
     .all();
 
-  return NextResponse.json(allUsers);
+    return NextResponse.json(allUsers);
+  }, "List users error", "Failed to load users");
 }

@@ -9,6 +9,9 @@ import { adoptBaseline } from "./lib/adopt-baseline.mjs";
 const projectRoot = process.cwd();
 const databasePath = resolve(projectRoot, ".test/migration-upgrade.db");
 const orphanDatabasePath = resolve(projectRoot, ".test/migration-orphan.db");
+const identityDatabasePath = resolve(projectRoot, ".test/migration-identity.db");
+const reviewDatabasePath = resolve(projectRoot, ".test/migration-review.db");
+const emptyLibraryDatabasePath = resolve(projectRoot, ".test/migration-empty-library.db");
 const databaseUrl = pathToFileURL(databasePath).href;
 const migrationsFolder = resolve(projectRoot, "drizzle");
 
@@ -77,8 +80,197 @@ async function verifyOrphanedUpgradeIsRejected() {
   }
 }
 
+async function verifyCanonicalIdentityCollisionIsRejected() {
+  await Promise.all([
+    rm(identityDatabasePath, { force: true }),
+    rm(`${identityDatabasePath}-shm`, { force: true }),
+    rm(`${identityDatabasePath}-wal`, { force: true }),
+  ]);
+
+  const identityClient = createClient({
+    url: pathToFileURL(identityDatabasePath).href,
+  });
+  try {
+    const baseline = await readFile(
+      resolve(projectRoot, "drizzle/0000_baseline.sql"),
+      "utf8",
+    );
+    await identityClient.executeMultiple(
+      baseline.replaceAll("--> statement-breakpoint", ""),
+    );
+    await identityClient.batch(
+      [
+        `INSERT INTO users
+          (id, username, first_name, last_name, password_hash, avatar_color, created_at)
+          VALUES ('Q12345678901234567890', 'identity-owner', 'Identity', 'Owner', 'hash', '#123456', 1)`,
+        `INSERT INTO books
+          (id, title, authors, isbn, spine_color, added_by, created_at)
+          VALUES ('R12345678901234567890', 'ISBN Ten', '["Author"]', '1853260061', '#123456', 'Q12345678901234567890', 2)`,
+        `INSERT INTO books
+          (id, title, authors, isbn, spine_color, added_by, created_at)
+          VALUES ('S12345678901234567890', 'ISBN Thirteen', '["Author"]', '9781853260063', '#654321', 'Q12345678901234567890', 3)`,
+      ],
+      "write",
+    );
+    await adoptBaseline(identityClient, projectRoot);
+
+    let rejected = false;
+    try {
+      await migrate(drizzle(identityClient), { migrationsFolder });
+    } catch (error) {
+      rejected = /constraint|unique/i.test(String(error));
+    }
+    if (!rejected) {
+      throw new Error("Identity migration accepted a canonical ISBN collision");
+    }
+
+    const booksAfter = await identityClient.execute(
+      "SELECT isbn FROM books ORDER BY id",
+    );
+    const migrationRecord = await identityClient.execute(
+      "SELECT COUNT(*) AS count FROM __drizzle_migrations WHERE created_at = 1786203595300",
+    );
+    const uniqueIndex = await identityClient.execute(
+      "SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'index' AND name = 'books_isbn_unique'",
+    );
+    const aliasTable = await identityClient.execute(
+      "SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table' AND name = 'book_google_ids'",
+    );
+    if (
+      booksAfter.rows[0]?.isbn !== "1853260061" ||
+      booksAfter.rows[1]?.isbn !== "9781853260063" ||
+      Number(migrationRecord.rows[0]?.count) !== 0 ||
+      Number(uniqueIndex.rows[0]?.count) !== 0 ||
+      Number(aliasTable.rows[0]?.count) !== 0
+    ) {
+      throw new Error("Rejected identity migration was not rolled back cleanly");
+    }
+  } finally {
+    identityClient.close();
+    await Promise.all([
+      rm(identityDatabasePath, { force: true }),
+      rm(`${identityDatabasePath}-shm`, { force: true }),
+      rm(`${identityDatabasePath}-wal`, { force: true }),
+    ]);
+  }
+}
+
+async function verifyReviewWithoutRatingIsRejected() {
+  await Promise.all([
+    rm(reviewDatabasePath, { force: true }),
+    rm(`${reviewDatabasePath}-shm`, { force: true }),
+    rm(`${reviewDatabasePath}-wal`, { force: true }),
+  ]);
+  const reviewClient = createClient({ url: pathToFileURL(reviewDatabasePath).href });
+  try {
+    const baseline = await readFile(
+      resolve(projectRoot, "drizzle/0000_baseline.sql"),
+      "utf8",
+    );
+    await reviewClient.executeMultiple(
+      baseline.replaceAll("--> statement-breakpoint", ""),
+    );
+    await reviewClient.batch(
+      [
+        `INSERT INTO users
+          (id, username, first_name, last_name, password_hash, avatar_color, created_at)
+          VALUES ('T12345678901234567890', 'review-owner', 'Review', 'Owner', 'hash', '#123456', 1)`,
+        `INSERT INTO books
+          (id, title, authors, spine_color, added_by, created_at)
+          VALUES ('U12345678901234567890', 'Reviewed Book', '["Author"]', '#123456', 'T12345678901234567890', 2)`,
+        `INSERT INTO user_books
+          (id, user_id, book_id, rating, review, created_at, updated_at)
+          VALUES ('V12345678901234567890', 'T12345678901234567890', 'U12345678901234567890', NULL, 'Legacy review', 3, 3)`,
+      ],
+      "write",
+    );
+    await adoptBaseline(reviewClient, projectRoot);
+
+    let rejected = false;
+    try {
+      await migrate(drizzle(reviewClient), { migrationsFolder });
+    } catch (error) {
+      rejected = /constraint/i.test(String(error));
+    }
+    if (!rejected) {
+      throw new Error("Identity migration accepted a written review without a rating");
+    }
+
+    const relationship = await reviewClient.execute(
+      "SELECT rating, review FROM user_books WHERE id = 'V12345678901234567890'",
+    );
+    const migrationRecord = await reviewClient.execute(
+      "SELECT COUNT(*) AS count FROM __drizzle_migrations WHERE created_at = 1786203595300",
+    );
+    if (
+      relationship.rows[0]?.rating !== null ||
+      relationship.rows[0]?.review !== "Legacy review" ||
+      Number(migrationRecord.rows[0]?.count) !== 0
+    ) {
+      throw new Error("Rejected review migration was not rolled back cleanly");
+    }
+  } finally {
+    reviewClient.close();
+    await Promise.all([
+      rm(reviewDatabasePath, { force: true }),
+      rm(`${reviewDatabasePath}-shm`, { force: true }),
+      rm(`${reviewDatabasePath}-wal`, { force: true }),
+    ]);
+  }
+}
+
+async function verifyInitializedEmptyLibraryIsFrozen() {
+  await Promise.all([
+    rm(emptyLibraryDatabasePath, { force: true }),
+    rm(`${emptyLibraryDatabasePath}-shm`, { force: true }),
+    rm(`${emptyLibraryDatabasePath}-wal`, { force: true }),
+  ]);
+  const emptyClient = createClient({
+    url: pathToFileURL(emptyLibraryDatabasePath).href,
+  });
+  try {
+    const baseline = await readFile(
+      resolve(projectRoot, "drizzle/0000_baseline.sql"),
+      "utf8",
+    );
+    await emptyClient.executeMultiple(
+      baseline.replaceAll("--> statement-breakpoint", ""),
+    );
+    await emptyClient.execute(`INSERT INTO users
+      (id, username, first_name, last_name, password_hash, avatar_color, created_at)
+      VALUES ('W12345678901234567890', 'empty-owner', 'Empty', 'Owner', 'hash', '#123456', 1)`);
+    await adoptBaseline(emptyClient, projectRoot);
+    await migrate(drizzle(emptyClient), { migrationsFolder });
+
+    const marker = await emptyClient.execute(
+      "SELECT COUNT(*) AS count FROM __migration_0004_maintenance WHERE enabled = 1",
+    );
+    let blocked = false;
+    try {
+      await emptyClient.execute(`INSERT INTO books
+        (id, title, authors, spine_color, added_by, created_at)
+        VALUES ('X12345678901234567890', 'Blocked', '["Author"]', '#123456', 'W12345678901234567890', 2)`);
+    } catch (error) {
+      blocked = /BookShare maintenance/.test(String(error));
+    }
+    if (Number(marker.rows[0]?.count) !== 1 || !blocked) {
+      throw new Error("Initialized zero-book library was not write-frozen");
+    }
+  } finally {
+    emptyClient.close();
+    await Promise.all([
+      rm(emptyLibraryDatabasePath, { force: true }),
+      rm(`${emptyLibraryDatabasePath}-shm`, { force: true }),
+      rm(`${emptyLibraryDatabasePath}-wal`, { force: true }),
+    ]);
+  }
+}
+
 await mkdir(dirname(databasePath), { recursive: true });
 await verifyOrphanedUpgradeIsRejected();
+await verifyCanonicalIdentityCollisionIsRejected();
+await verifyReviewWithoutRatingIsRejected();
+await verifyInitializedEmptyLibraryIsFrozen();
 
 await Promise.all([
   rm(databasePath, { force: true }),
@@ -160,7 +352,7 @@ try {
           "google-existing",
           "Existing Book",
           '["Existing Author"]',
-          "9781234567890",
+          "1853\t260061",
           "#123456",
           "A12345678901234567890",
           3_000,
@@ -197,7 +389,7 @@ try {
           2,
           9,
           null,
-          null,
+          "   ",
           4_500,
           6_000,
         ],
@@ -243,6 +435,22 @@ try {
 
   await migrate(drizzle(client), { migrationsFolder });
 
+  const maintenanceTriggers = await client.execute(
+    `SELECT name FROM sqlite_master
+     WHERE type = 'trigger' AND name LIKE 'maintenance_0004_%'
+     ORDER BY name`,
+  );
+  if (maintenanceTriggers.rows.length !== 11) {
+    throw new Error("API correctness migration did not install the write freeze");
+  }
+  await expectConstraint(
+    `INSERT INTO books
+      (id, title, authors, spine_color, added_by, created_at)
+      VALUES ('Y12345678901234567890', 'Frozen Write', '["Author"]', '#123456', 'A12345678901234567890', 1)`,
+    "Migration write freeze",
+  );
+  await client.execute("DELETE FROM __migration_0004_maintenance");
+
   const migratedUsers = await client.execute(
     "SELECT username, role, session_version FROM users ORDER BY created_at, id",
   );
@@ -281,6 +489,23 @@ try {
     Number(merged?.updated_at) !== 6_000
   ) {
     throw new Error("Legacy relationships were not consolidated deterministically");
+  }
+
+  const normalizedBook = await client.execute(
+    "SELECT isbn FROM books WHERE id = 'C12345678901234567890'",
+  );
+  if (normalizedBook.rows[0]?.isbn !== "9781853260063") {
+    throw new Error("Legacy ISBN-10 was not normalized to canonical ISBN-13");
+  }
+  const googleAliases = await client.execute(
+    "SELECT google_books_id, book_id FROM book_google_ids",
+  );
+  if (
+    googleAliases.rows.length !== 1 ||
+    googleAliases.rows[0]?.google_books_id !== "google-existing" ||
+    googleAliases.rows[0]?.book_id !== "C12345678901234567890"
+  ) {
+    throw new Error("Legacy Google Books identities were not backfilled");
   }
 
   async function expectConstraint(sql, label) {
@@ -326,10 +551,13 @@ try {
   );
 
   const expectedIndexes = {
+    book_google_ids_book_id_idx:
+      "create index book_google_ids_book_id_idx on book_google_ids (book_id)",
     books_added_by_idx: "create index books_added_by_idx on books (added_by)",
-    books_google_books_id_idx:
-      "create index books_google_books_id_idx on books (google_books_id)",
-    books_isbn_idx: "create index books_isbn_idx on books (isbn)",
+    books_google_books_id_unique:
+      "create unique index books_google_books_id_unique on books (google_books_id) where books.google_books_id is not null",
+    books_isbn_unique:
+      "create unique index books_isbn_unique on books (isbn) where books.isbn is not null",
     invite_tokens_created_by_idx:
       "create index invite_tokens_created_by_idx on invite_tokens (created_by)",
     invite_tokens_used_by_idx:
@@ -381,7 +609,13 @@ try {
   const bookCascade = await client.execute(
     "SELECT COUNT(*) AS count FROM user_books WHERE book_id = 'C12345678901234567890'",
   );
-  if (Number(bookCascade.rows[0]?.count) !== 0) {
+  const googleAliasCascade = await client.execute(
+    "SELECT COUNT(*) AS count FROM book_google_ids WHERE book_id = 'C12345678901234567890'",
+  );
+  if (
+    Number(bookCascade.rows[0]?.count) !== 0 ||
+    Number(googleAliasCascade.rows[0]?.count) !== 0
+  ) {
     throw new Error("Book relationship cascade was not enforced");
   }
 
