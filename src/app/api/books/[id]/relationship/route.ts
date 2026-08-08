@@ -4,22 +4,25 @@ import { authorizeCurrentUser } from "@/lib/authorization";
 import { db } from "@/lib/db";
 import { userBooks } from "@/lib/db/schema";
 import { generatedIdSchema } from "@/lib/validation";
+import { apiError, withApiErrorBoundary } from "@/lib/api-response";
 
 export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  return withApiErrorBoundary(async () => {
   const authorization = await authorizeCurrentUser();
   if (!authorization.ok) {
-    return NextResponse.json(
-      { error: authorization.error },
-      { status: authorization.status },
+    return apiError(
+      authorization.status === 401 ? "UNAUTHORIZED" : "FORBIDDEN",
+      authorization.error,
+      authorization.status,
     );
   }
 
   const { id } = await params;
   if (!generatedIdSchema.safeParse(id).success) {
-    return NextResponse.json({ error: "Invalid book ID" }, { status: 400 });
+    return apiError("INVALID_BOOK_ID", "Invalid book ID", 400);
   }
 
   const deleted = await db
@@ -34,8 +37,9 @@ export async function DELETE(
     .all();
 
   if (deleted.length === 0) {
-    return NextResponse.json({ error: "Relationship not found" }, { status: 404 });
+    return apiError("RELATIONSHIP_NOT_FOUND", "Relationship not found", 404);
   }
 
-  return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true });
+  }, "Remove relationship error", "Failed to remove book activity");
 }

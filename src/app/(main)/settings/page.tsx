@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
+import { apiErrorMessage, apiFetch } from "@/lib/api-client";
+import type { PublicUserDto } from "@/lib/api-types";
 import {
   Copy,
   Check,
@@ -25,22 +27,20 @@ interface InviteToken {
   createdAt: string;
 }
 
-interface UserProfile {
-  id: string;
-  username: string;
-  firstName: string;
-  lastName: string;
-  avatarColor: string;
-}
-
 export default function SettingsPage() {
   const [tokens, setTokens] = useState<InviteToken[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [tokensLoading, setTokensLoading] = useState(true);
+  const [tokensError, setTokensError] = useState<string | null>(null);
+  const [inviteActionError, setInviteActionError] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
+  const tokensRequestRef = useRef<AbortController | null>(null);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Account state
-  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [profile, setProfile] = useState<PublicUserDto | null>(null);
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [profileError, setProfileError] = useState<string | null>(null);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [username, setUsername] = useState("");
@@ -55,75 +55,133 @@ export default function SettingsPage() {
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [profileMessage, setProfileMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [passwordMessage, setPasswordMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const profileRequestRef = useRef<AbortController | null>(null);
+  const profileEditVersionRef = useRef(0);
 
   useEffect(() => {
-    fetchTokens();
-    fetchProfile();
+    void fetchTokens();
+    void fetchProfile();
+
+    return () => {
+      tokensRequestRef.current?.abort();
+      tokensRequestRef.current = null;
+      profileRequestRef.current?.abort();
+      profileRequestRef.current = null;
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    };
   }, []);
 
   async function fetchTokens() {
+    tokensRequestRef.current?.abort();
+    const controller = new AbortController();
+    tokensRequestRef.current = controller;
+    setTokensLoading(true);
+    setTokensError(null);
+
     try {
-      const res = await fetch("/api/invite");
-      if (res.ok) {
-        const data = await res.json();
-        setTokens(data);
-      }
+      const data = await apiFetch<InviteToken[]>("/api/invite", {
+        signal: controller.signal,
+      });
+      if (tokensRequestRef.current === controller) setTokens(data);
     } catch (error) {
-      console.error("Failed to fetch tokens:", error);
+      if (
+        tokensRequestRef.current === controller &&
+        !(error instanceof DOMException && error.name === "AbortError")
+      ) {
+        setTokensError(apiErrorMessage(error, "Unable to load invite tokens"));
+      }
     } finally {
-      setLoading(false);
+      if (tokensRequestRef.current === controller) {
+        tokensRequestRef.current = null;
+        setTokensLoading(false);
+      }
     }
   }
 
   async function generateToken() {
+    if (generating) return;
     setGenerating(true);
+    setInviteActionError(null);
     try {
-      const res = await fetch("/api/invite", { method: "POST" });
-      if (res.ok) {
-        fetchTokens();
-      }
+      await apiFetch<InviteToken>("/api/invite", { method: "POST" });
+      await fetchTokens();
     } catch (error) {
-      console.error("Failed to generate token:", error);
+      setInviteActionError(
+        apiErrorMessage(error, "Unable to generate an invite token"),
+      );
     } finally {
       setGenerating(false);
     }
   }
 
-  function copyToken(token: string) {
-    navigator.clipboard.writeText(token);
-    setCopiedToken(token);
-    setTimeout(() => setCopiedToken(null), 2000);
-  }
-
-  function copyInviteLink(token: string) {
-    const url = `${window.location.origin}/register?token=${token}`;
-    navigator.clipboard.writeText(url);
-    setCopiedToken(token + "-link");
-    setTimeout(() => setCopiedToken(null), 2000);
-  }
-
-  async function fetchProfile() {
+  async function copyText(text: string, copiedKey: string) {
+    setInviteActionError(null);
     try {
-      const res = await fetch("/api/auth/account");
-      if (res.ok) {
-        const data = await res.json();
+      await navigator.clipboard.writeText(text);
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+      setCopiedToken(copiedKey);
+      copyTimerRef.current = setTimeout(() => {
+        setCopiedToken(null);
+        copyTimerRef.current = null;
+      }, 2000);
+    } catch {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = null;
+      setCopiedToken(null);
+      setInviteActionError("Unable to copy to the clipboard");
+    }
+  }
+
+  async function copyInviteLink(token: string) {
+    const url = `${window.location.origin}/register?token=${token}`;
+    await copyText(url, token + "-link");
+  }
+
+  async function fetchProfile(
+    preserveEditsSince = profileEditVersionRef.current,
+  ) {
+    profileRequestRef.current?.abort();
+    const controller = new AbortController();
+    profileRequestRef.current = controller;
+    setProfileLoading(true);
+    setProfileError(null);
+
+    try {
+      const data = await apiFetch<PublicUserDto>("/api/auth/account", {
+        signal: controller.signal,
+      });
+      if (profileRequestRef.current === controller) {
         setProfile(data);
-        setFirstName(data.firstName);
-        setLastName(data.lastName);
-        setUsername(data.username);
+        if (profileEditVersionRef.current === preserveEditsSince) {
+          setFirstName(data.firstName);
+          setLastName(data.lastName);
+          setUsername(data.username);
+        }
       }
     } catch (error) {
-      console.error("Failed to fetch profile:", error);
+      if (
+        profileRequestRef.current === controller &&
+        !(error instanceof DOMException && error.name === "AbortError")
+      ) {
+        setProfileError(apiErrorMessage(error, "Unable to load your account"));
+      }
+    } finally {
+      if (profileRequestRef.current === controller) {
+        profileRequestRef.current = null;
+        setProfileLoading(false);
+      }
     }
   }
 
   async function saveProfile(e: React.FormEvent) {
     e.preventDefault();
+    if (profileSaving || passwordSaving) return;
     setProfileSaving(true);
     setProfileMessage(null);
+    const submittedEditVersion = profileEditVersionRef.current;
 
     try {
-      const res = await fetch("/api/auth/account", {
+      await apiFetch<{ success: true }>("/api/auth/account", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -136,17 +194,14 @@ export default function SettingsPage() {
         }),
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        setProfileMessage({ type: "error", text: data.error });
-        return;
-      }
-
       setProfileMessage({ type: "success", text: "Profile updated" });
       setUsernamePassword("");
-      fetchProfile();
-    } catch {
-      setProfileMessage({ type: "error", text: "Something went wrong" });
+      await fetchProfile(submittedEditVersion);
+    } catch (error) {
+      setProfileMessage({
+        type: "error",
+        text: apiErrorMessage(error, "Unable to update your profile"),
+      });
     } finally {
       setProfileSaving(false);
     }
@@ -154,6 +209,7 @@ export default function SettingsPage() {
 
   async function changePassword(e: React.FormEvent) {
     e.preventDefault();
+    if (profileSaving || passwordSaving) return;
     setPasswordSaving(true);
     setPasswordMessage(null);
 
@@ -164,24 +220,21 @@ export default function SettingsPage() {
     }
 
     try {
-      const res = await fetch("/api/auth/account", {
+      await apiFetch<{ success: true }>("/api/auth/account", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ currentPassword, newPassword }),
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        setPasswordMessage({ type: "error", text: data.error });
-        return;
-      }
-
       setPasswordMessage({ type: "success", text: "Password changed" });
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
-    } catch {
-      setPasswordMessage({ type: "error", text: "Something went wrong" });
+    } catch (error) {
+      setPasswordMessage({
+        type: "error",
+        text: apiErrorMessage(error, "Unable to change your password"),
+      });
     } finally {
       setPasswordSaving(false);
     }
@@ -204,6 +257,32 @@ export default function SettingsPage() {
       </p>
 
       {/* Account Settings */}
+      {profileLoading && !profile && (
+        <div className="card-warm p-6 mb-8 flex items-center justify-center py-12">
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+          >
+            <User className="w-6 h-6 text-warm-400" />
+          </motion.div>
+        </div>
+      )}
+
+      {profileError && !profile && (
+        <div className="card-warm p-6 mb-8">
+          <div className="p-3 rounded-lg text-sm bg-red-50 border border-red-200 text-red-700">
+            <p>{profileError}</p>
+            <button
+              type="button"
+              onClick={() => void fetchProfile()}
+              className="mt-2 font-medium underline underline-offset-2"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      )}
+
       {profile && (
         <div className="card-warm p-6 mb-8">
           <div className="flex items-center gap-3 mb-6">
@@ -223,6 +302,19 @@ export default function SettingsPage() {
             </div>
           </div>
 
+          {profileError && (
+            <div className="p-3 rounded-lg text-sm bg-red-50 border border-red-200 text-red-700 mb-4">
+              <p>{profileError}</p>
+              <button
+                type="button"
+                onClick={() => void fetchProfile()}
+                className="mt-2 font-medium underline underline-offset-2"
+              >
+                Retry
+              </button>
+            </div>
+          )}
+
           <form onSubmit={saveProfile} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -232,7 +324,10 @@ export default function SettingsPage() {
                 <input
                   type="text"
                   value={firstName}
-                  onChange={(e) => setFirstName(e.target.value)}
+                  onChange={(e) => {
+                    profileEditVersionRef.current += 1;
+                    setFirstName(e.target.value);
+                  }}
                   className="w-full px-4 py-2.5 bg-cream border border-warm-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-400 focus:border-transparent text-warm-900 text-sm"
                   required
                 />
@@ -244,7 +339,10 @@ export default function SettingsPage() {
                 <input
                   type="text"
                   value={lastName}
-                  onChange={(e) => setLastName(e.target.value)}
+                  onChange={(e) => {
+                    profileEditVersionRef.current += 1;
+                    setLastName(e.target.value);
+                  }}
                   className="w-full px-4 py-2.5 bg-cream border border-warm-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-400 focus:border-transparent text-warm-900 text-sm"
                   required
                 />
@@ -258,7 +356,10 @@ export default function SettingsPage() {
               <input
                 type="text"
                 value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                onChange={(e) => {
+                  profileEditVersionRef.current += 1;
+                  setUsername(e.target.value);
+                }}
                 className="w-full px-4 py-2.5 bg-cream border border-warm-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-400 focus:border-transparent text-warm-900 text-sm"
                 required
               />
@@ -313,7 +414,7 @@ export default function SettingsPage() {
 
             <button
               type="submit"
-              disabled={profileSaving || !profileChanged}
+              disabled={profileSaving || passwordSaving || !profileChanged}
               className="flex items-center gap-2 bg-warm-700 text-cream px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-warm-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Save className="w-4 h-4" />
@@ -414,7 +515,7 @@ export default function SettingsPage() {
 
           <button
             type="submit"
-            disabled={passwordSaving || !currentPassword || !newPassword || !confirmPassword}
+            disabled={profileSaving || passwordSaving || !currentPassword || !newPassword || !confirmPassword}
             className="flex items-center gap-2 bg-warm-700 text-cream px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-warm-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Lock className="w-4 h-4" />
@@ -449,7 +550,26 @@ export default function SettingsPage() {
           </button>
         </div>
 
-        {loading ? (
+        {tokensError && (
+          <div className="p-3 rounded-lg text-sm bg-red-50 border border-red-200 text-red-700 mb-4">
+            <p>{tokensError}</p>
+            <button
+              type="button"
+              onClick={() => void fetchTokens()}
+              className="mt-2 font-medium underline underline-offset-2"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        {inviteActionError && (
+          <div className="p-3 rounded-lg text-sm bg-red-50 border border-red-200 text-red-700 mb-4">
+            {inviteActionError}
+          </div>
+        )}
+
+        {tokensLoading ? (
           <div className="flex items-center justify-center py-8">
             <motion.div
               animate={{ rotate: 360 }}
@@ -458,7 +578,7 @@ export default function SettingsPage() {
               <BookOpen className="w-6 h-6 text-warm-400" />
             </motion.div>
           </div>
-        ) : tokens.length === 0 ? (
+        ) : tokensError && tokens.length === 0 ? null : tokens.length === 0 ? (
           <p className="text-warm-400 text-sm text-center py-8 italic">
             No invite tokens yet. Generate one to invite friends!
           </p>
@@ -509,7 +629,7 @@ export default function SettingsPage() {
                   {!isUsed && !isExpired && (
                     <div className="flex gap-1">
                       <button
-                        onClick={() => copyToken(token.token)}
+                        onClick={() => void copyText(token.token, token.token)}
                         className="p-2 rounded-lg text-warm-500 hover:bg-warm-100 transition-colors"
                         title="Copy token"
                       >
@@ -520,7 +640,7 @@ export default function SettingsPage() {
                         )}
                       </button>
                       <button
-                        onClick={() => copyInviteLink(token.token)}
+                        onClick={() => void copyInviteLink(token.token)}
                         className="px-3 py-1.5 rounded-lg text-xs font-medium text-warm-600 hover:bg-warm-100 transition-colors border border-warm-200"
                       >
                         {copiedToken === token.token + "-link"

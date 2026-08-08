@@ -1,48 +1,63 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { BookOpen, Eye, PenLine, Star, BookMarked } from "lucide-react";
 import Bookshelf from "@/components/bookshelf/Bookshelf";
-import type { BookData } from "@/components/bookshelf/BookSpine";
+import { apiErrorMessage, apiFetch } from "@/lib/api-client";
+import type { BookDto } from "@/lib/api-types";
 
-interface BookWithDetails extends BookData {
-  createdAt: string;
-  readers: Array<{ id: string }>;
-  annotators: Array<{ id: string }>;
-  currentUserBook: {
-    owned: boolean;
-    read: boolean;
-    currentlyReading: boolean;
-    annotated: boolean;
-    rating: number | null;
-  } | null;
-}
+type BooksRequest =
+  | { status: "loading" }
+  | { status: "success"; books: BookDto[] }
+  | { status: "error"; message: string };
+
+const EMPTY_BOOKS: BookDto[] = [];
 
 type TabKey = "owned" | "currentlyReading" | "read" | "annotated";
 
 export default function ProfilePage() {
-  const [books, setBooks] = useState<BookWithDetails[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [request, setRequest] = useState<BooksRequest>({ status: "loading" });
+  const requestController = useRef<AbortController | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>("owned");
 
-  useEffect(() => {
-    fetchBooks();
-  }, []);
+  const fetchBooks = useCallback(async () => {
+    requestController.current?.abort();
+    const controller = new AbortController();
+    requestController.current = controller;
+    setRequest({ status: "loading" });
 
-  async function fetchBooks() {
     try {
-      const res = await fetch("/api/books");
-      if (res.ok) {
-        const data = await res.json();
-        setBooks(data);
+      const books = await apiFetch<BookDto[]>("/api/books", {
+        signal: controller.signal,
+      });
+      if (!controller.signal.aborted) {
+        setRequest({ status: "success", books });
       }
     } catch (error) {
-      console.error("Failed to fetch books:", error);
+      if (
+        controller.signal.aborted ||
+        (error instanceof DOMException && error.name === "AbortError")
+      ) {
+        return;
+      }
+      setRequest({
+        status: "error",
+        message: apiErrorMessage(error, "Could not load your library"),
+      });
     } finally {
-      setLoading(false);
+      if (requestController.current === controller) {
+        requestController.current = null;
+      }
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    void fetchBooks();
+    return () => requestController.current?.abort();
+  }, [fetchBooks]);
+
+  const books = request.status === "success" ? request.books : EMPTY_BOOKS;
 
   const myBooks = useMemo(() => {
     return books.filter((b) => {
@@ -98,7 +113,7 @@ export default function ProfilePage() {
     },
   ];
 
-  if (loading) {
+  if (request.status === "loading") {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-12">
         <div className="flex items-center justify-center h-[400px]">
@@ -108,6 +123,25 @@ export default function ProfilePage() {
           >
             <BookOpen className="w-8 h-8 text-warm-500" />
           </motion.div>
+        </div>
+      </div>
+    );
+  }
+
+  if (request.status === "error") {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-12">
+        <div className="card-warm max-w-xl mx-auto p-6 text-center">
+          <h1 className="font-serif text-xl font-bold text-warm-900 mb-2">
+            Couldn&apos;t load your library
+          </h1>
+          <p className="text-warm-500 text-sm mb-5">{request.message}</p>
+          <button
+            onClick={() => void fetchBooks()}
+            className="bg-warm-700 text-cream px-4 py-2 rounded-lg font-medium hover:bg-warm-800 transition-colors text-sm"
+          >
+            Try Again
+          </button>
         </div>
       </div>
     );

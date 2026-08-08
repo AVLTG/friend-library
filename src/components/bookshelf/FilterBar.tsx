@@ -3,6 +3,7 @@
 import { Search, SlidersHorizontal, Users, BookOpen, BookMarked, Eye } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useState } from "react";
+import type { PublicUserDto } from "@/lib/api-types";
 
 interface FilterBarProps {
   search: string;
@@ -17,7 +18,9 @@ interface FilterBarProps {
   onFilterReadByChange: (value: string) => void;
   filterCurrentlyReading: string;
   onFilterCurrentlyReadingChange: (value: string) => void;
-  owners: Array<{ id: string; firstName: string; username: string; avatarColor: string }>;
+  owners: PublicUserDto[];
+  readers: PublicUserDto[];
+  currentlyReadingUsers: PublicUserDto[];
   categories: string[];
 }
 
@@ -35,6 +38,8 @@ export default function FilterBar({
   filterCurrentlyReading,
   onFilterCurrentlyReadingChange,
   owners,
+  readers,
+  currentlyReadingUsers,
   categories,
 }: FilterBarProps) {
   const [showFilters, setShowFilters] = useState(false);
@@ -156,9 +161,9 @@ export default function FilterBar({
                 >
                   <option value="">Anyone</option>
                   <option value="__any">At least 1 person</option>
-                  {owners.map((owner) => (
-                    <option key={owner.id} value={owner.id}>
-                      {owner.firstName}
+                  {readers.map((reader) => (
+                    <option key={reader.id} value={reader.id}>
+                      {reader.firstName}
                     </option>
                   ))}
                 </select>
@@ -177,9 +182,9 @@ export default function FilterBar({
                 >
                   <option value="">Anyone</option>
                   <option value="__any">At least 1 person</option>
-                  {owners.map((owner) => (
-                    <option key={owner.id} value={owner.id}>
-                      {owner.firstName}
+                  {currentlyReadingUsers.map((reader) => (
+                    <option key={reader.id} value={reader.id}>
+                      {reader.firstName}
                     </option>
                   ))}
                 </select>

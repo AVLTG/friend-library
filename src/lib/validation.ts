@@ -101,7 +101,11 @@ export const updateBookSchema = z
     review: z.string().max(5000).nullable().optional(),
   })
   .strict()
-  .refine((value) => Object.keys(value).length > 0, "No changes provided");
+  .refine((value) => Object.keys(value).length > 0, "No changes provided")
+  .refine(
+    (value) => !(value.read === true && value.currentlyReading === true),
+    "A book cannot be read and currently reading at the same time",
+  );
 
 export const generatedIdSchema = z.string().regex(/^[A-Za-z0-9]{21}$/);
 
@@ -113,6 +117,12 @@ export class RequestBodyError extends Error {
   constructor(
     message: string,
     public readonly status: number,
+    public readonly code =
+      status === 413
+        ? "BODY_TOO_LARGE"
+        : status === 415
+          ? "UNSUPPORTED_MEDIA_TYPE"
+          : "INVALID_REQUEST",
   ) {
     super(message);
   }
@@ -147,9 +157,13 @@ export async function parseJsonBody<T>(
 
   const result = schema.safeParse(value);
   if (!result.success) {
+    const message = result.error.issues[0]?.message || "Invalid request body";
     throw new RequestBodyError(
-      result.error.issues[0]?.message || "Invalid request body",
+      message,
       400,
+      message === "A book cannot be read and currently reading at the same time"
+        ? "INVALID_READING_STATE"
+        : "INVALID_REQUEST",
     );
   }
 

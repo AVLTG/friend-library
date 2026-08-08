@@ -79,10 +79,25 @@ export const books = sqliteTable(
       .$defaultFn(() => new Date()),
   },
   (table) => [
-    index("books_google_books_id_idx").on(table.googleBooksId),
-    index("books_isbn_idx").on(table.isbn),
+    uniqueIndex("books_google_books_id_unique")
+      .on(table.googleBooksId)
+      .where(sql`${table.googleBooksId} IS NOT NULL`),
+    uniqueIndex("books_isbn_unique")
+      .on(table.isbn)
+      .where(sql`${table.isbn} IS NOT NULL`),
     index("books_added_by_idx").on(table.addedBy),
   ],
+);
+
+export const bookGoogleIds = sqliteTable(
+  "book_google_ids",
+  {
+    googleBooksId: text("google_books_id").primaryKey(),
+    bookId: text("book_id")
+      .notNull()
+      .references(() => books.id, { onDelete: "cascade" }),
+  },
+  (table) => [index("book_google_ids_book_id_idx").on(table.bookId)],
 );
 
 export const userBooks = sqliteTable("user_books", {
@@ -144,6 +159,7 @@ export const rateLimitBuckets = sqliteTable(
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Book = typeof books.$inferSelect;
+export type BookGoogleId = typeof bookGoogleIds.$inferSelect;
 export type NewBook = typeof books.$inferInsert;
 export type UserBook = typeof userBooks.$inferSelect;
 export type InviteToken = typeof inviteTokens.$inferSelect;

@@ -1,42 +1,28 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { BookOpen, Plus } from "lucide-react";
 import Link from "next/link";
 import Bookshelf from "@/components/bookshelf/Bookshelf";
 import FilterBar from "@/components/bookshelf/FilterBar";
-import type { BookData } from "@/components/bookshelf/BookSpine";
+import { apiErrorMessage, apiFetch } from "@/lib/api-client";
+import type { BookDto, PublicUserDto } from "@/lib/api-types";
 
-interface BookWithDetails extends BookData {
-  description?: string;
-  isbn?: string;
-  publishedDate?: string;
-  categories: string[];
-  readers: Array<{ id: string; firstName: string; avatarColor: string }>;
-  annotators: Array<{ id: string; firstName: string; avatarColor: string }>;
-  currentlyReading: Array<{ id: string; firstName: string; avatarColor: string }>;
-  ratings: Array<{
-    userId: string;
-    firstName: string;
-    username: string;
-    avatarColor: string;
-    rating: number;
-    review?: string;
-  }>;
-  createdAt: string;
-  currentUserBook: {
-    owned: boolean;
-    read: boolean;
-    currentlyReading: boolean;
-    annotated: boolean;
-    rating: number | null;
-  } | null;
+type BooksRequest =
+  | { status: "loading" }
+  | { status: "success"; books: BookDto[] }
+  | { status: "error"; message: string };
+
+const EMPTY_BOOKS: BookDto[] = [];
+
+function uniqueUsers(users: PublicUserDto[]): PublicUserDto[] {
+  return Array.from(new Map(users.map((user) => [user.id, user])).values());
 }
 
 export default function LibraryPage() {
-  const [books, setBooks] = useState<BookWithDetails[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [request, setRequest] = useState<BooksRequest>({ status: "loading" });
+  const requestController = useRef<AbortController | null>(null);
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("title");
   const [filterOwner, setFilterOwner] = useState("");
@@ -44,38 +30,54 @@ export default function LibraryPage() {
   const [filterReadBy, setFilterReadBy] = useState("");
   const [filterCurrentlyReading, setFilterCurrentlyReading] = useState("");
 
-  useEffect(() => {
-    fetchBooks();
-  }, []);
+  const fetchBooks = useCallback(async () => {
+    requestController.current?.abort();
+    const controller = new AbortController();
+    requestController.current = controller;
+    setRequest({ status: "loading" });
 
-  async function fetchBooks() {
     try {
-      const res = await fetch("/api/books");
-      if (res.ok) {
-        const data = await res.json();
-        setBooks(data);
+      const books = await apiFetch<BookDto[]>("/api/books", {
+        signal: controller.signal,
+      });
+      if (!controller.signal.aborted) {
+        setRequest({ status: "success", books });
       }
     } catch (error) {
-      console.error("Failed to fetch books:", error);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  // Get unique owners across all books
-  const allOwners = useMemo(() => {
-    const ownerMap = new Map<
-      string,
-      { id: string; firstName: string; username: string; avatarColor: string }
-    >();
-    books.forEach((book) => {
-      book.owners.forEach((owner) => {
-        if (!ownerMap.has(owner.id)) {
-          ownerMap.set(owner.id, owner as typeof ownerMap extends Map<string, infer V> ? V : never);
-        }
+      if (
+        controller.signal.aborted ||
+        (error instanceof DOMException && error.name === "AbortError")
+      ) {
+        return;
+      }
+      setRequest({
+        status: "error",
+        message: apiErrorMessage(error, "Could not load the shared library"),
       });
-    });
-    return Array.from(ownerMap.values());
+    } finally {
+      if (requestController.current === controller) {
+        requestController.current = null;
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    void fetchBooks();
+    return () => requestController.current?.abort();
+  }, [fetchBooks]);
+
+  const books = request.status === "success" ? request.books : EMPTY_BOOKS;
+
+  const allOwners = useMemo(() => {
+    return uniqueUsers(books.flatMap((book) => book.owners));
+  }, [books]);
+
+  const allReaders = useMemo(() => {
+    return uniqueUsers(books.flatMap((book) => book.readers));
+  }, [books]);
+
+  const allCurrentlyReading = useMemo(() => {
+    return uniqueUsers(books.flatMap((book) => book.currentlyReading));
   }, [books]);
 
   // Get unique categories across all books
@@ -162,7 +164,7 @@ export default function LibraryPage() {
     return result;
   }, [books, search, sortBy, filterOwner, filterCategory, filterReadBy, filterCurrentlyReading]);
 
-  if (loading) {
+  if (request.status === "loading") {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-12">
         <div className="flex items-center justify-center h-[400px]">
@@ -172,6 +174,25 @@ export default function LibraryPage() {
           >
             <BookOpen className="w-8 h-8 text-warm-500" />
           </motion.div>
+        </div>
+      </div>
+    );
+  }
+
+  if (request.status === "error") {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-12">
+        <div className="card-warm max-w-xl mx-auto p-6 text-center">
+          <h1 className="font-serif text-xl font-bold text-warm-900 mb-2">
+            Couldn&apos;t load the shared library
+          </h1>
+          <p className="text-warm-500 text-sm mb-5">{request.message}</p>
+          <button
+            onClick={() => void fetchBooks()}
+            className="bg-warm-700 text-cream px-4 py-2 rounded-lg font-medium hover:bg-warm-800 transition-colors text-sm"
+          >
+            Try Again
+          </button>
         </div>
       </div>
     );
@@ -214,6 +235,8 @@ export default function LibraryPage() {
           filterCurrentlyReading={filterCurrentlyReading}
           onFilterCurrentlyReadingChange={setFilterCurrentlyReading}
           owners={allOwners}
+          readers={allReaders}
+          currentlyReadingUsers={allCurrentlyReading}
           categories={allCategories}
         />
       </div>

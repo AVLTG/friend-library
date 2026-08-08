@@ -16,86 +16,96 @@ import {
   Library,
   ArrowRight,
 } from "lucide-react";
+import { ApiError, apiErrorMessage, apiFetch } from "@/lib/api-client";
+import type { BookDto, CreateBookDto, SearchBookDto } from "@/lib/api-types";
+import {
+  findEditionIdentityMatch,
+  normalizeDuplicateText,
+  normalizeGoogleBooksId,
+} from "@/lib/book-identity";
 
-interface SearchResult {
-  id: string;
-  title: string;
-  authors: string[];
-  description?: string;
-  isbn?: string;
-  coverUrl?: string;
-  pageCount?: number;
-  publishedDate?: string;
-  categories?: string[];
-}
+type MatchedSearchResult = SearchBookDto & { existingBookId: string };
+type AddableSearchResult = SearchBookDto & {
+  possibleWorkTitle?: string;
+  identityConflict?: true;
+};
+type LibraryStatus = "loading" | "ready" | "error";
 
-interface ExistingBook {
-  id: string;
-  title: string;
-  authors: string[];
-  googleBooksId?: string;
-  isbn?: string;
-}
-
-function normalize(s: string): string {
-  return s
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, "")
-    .trim();
-}
-
-function titleSimilar(a: string, b: string): boolean {
-  const na = normalize(a);
-  const nb = normalize(b);
+function textSimilar(a: string, b: string): boolean {
+  const na = normalizeDuplicateText(a);
+  const nb = normalizeDuplicateText(b);
   if (!na || !nb) return false;
-  // Exact match after normalization
   if (na === nb) return true;
-  // Titles must be similar length (within 20%) to be considered the same book
-  const longer = na.length > nb.length ? na : nb;
-  const shorter = na.length > nb.length ? nb : na;
+
+  const aChars = [...na];
+  const bChars = [...nb];
+  const longer = aChars.length > bChars.length ? aChars : bChars;
+  const shorter = aChars.length > bChars.length ? bChars : aChars;
   if (shorter.length / longer.length < 0.8) return false;
-  // Levenshtein-style: count character overlap, require 90%+
+
   let matches = 0;
-  const longerArr = [...longer];
+  const unmatched = [...longer];
   for (const ch of shorter) {
-    const idx = longerArr.indexOf(ch);
+    const idx = unmatched.indexOf(ch);
     if (idx !== -1) {
       matches++;
-      longerArr.splice(idx, 1);
+      unmatched.splice(idx, 1);
     }
   }
   return matches / longer.length > 0.9;
 }
 
-function isExistingMatch(result: SearchResult, existing: ExistingBook): boolean {
-  // Match by Google Books ID
-  if (result.id && existing.googleBooksId && result.id === existing.googleBooksId) return true;
-  // Match by ISBN
-  if (result.isbn && existing.isbn && result.isbn === existing.isbn) return true;
-  // Fuzzy title + author match
-  if (titleSimilar(result.title, existing.title)) {
-    const resultAuthors = result.authors.map(normalize);
-    const existingAuthors = existing.authors.map(normalize);
-    const authorOverlap = resultAuthors.some((a) =>
-      existingAuthors.some((b) => a === b || a.includes(b) || b.includes(a))
-    );
-    if (authorOverlap) return true;
+function isPossibleWorkMatch(result: SearchBookDto, existing: BookDto): boolean {
+  if (!textSimilar(result.title, existing.title)) return false;
+
+  const resultAuthors = result.authors
+    .map(normalizeDuplicateText)
+    .filter(Boolean);
+  const existingAuthors = existing.authors
+    .map(normalizeDuplicateText)
+    .filter(Boolean);
+  return resultAuthors.some((a) =>
+    existingAuthors.some((b) => a === b || a.includes(b) || b.includes(a)),
+  );
+}
+
+function formatSearchError(error: unknown): string {
+  if (!(error instanceof ApiError)) {
+    return "Search failed. Please try again.";
   }
-  return false;
+  const message = error.message.replace(/[.!?]+$/, "");
+  if (error.retryAfter !== null) {
+    const seconds = Math.max(1, Math.ceil(error.retryAfter));
+    const wait =
+      seconds >= 60
+        ? `${Math.ceil(seconds / 60)} minute${seconds > 60 ? "s" : ""}`
+        : `${seconds} second${seconds === 1 ? "" : "s"}`;
+    return `${message}. Try again in about ${wait}.`;
+  }
+  if (error.status === 0) {
+    return `${message}. Check your connection and try again.`;
+  }
+  return `${message}. Please try again.`;
 }
 
 export default function AddBookPage() {
   const router = useRouter();
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<SearchResult[]>([]);
+  const [results, setResults] = useState<SearchBookDto[]>([]);
   const [searching, setSearching] = useState(false);
-  const [selectedBook, setSelectedBook] = useState<SearchResult | null>(null);
+  const [searchError, setSearchError] = useState("");
+  const [selectedBook, setSelectedBook] = useState<SearchBookDto | null>(null);
   const [editMode, setEditMode] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [showManual, setShowManual] = useState(false);
-  const [existingBooks, setExistingBooks] = useState<ExistingBook[]>([]);
-  const searchTimeout = useRef<ReturnType<typeof setTimeout>>(null);
+  const [existingBooks, setExistingBooks] = useState<BookDto[]>([]);
+  const [libraryStatus, setLibraryStatus] = useState<LibraryStatus>("loading");
+  const [libraryError, setLibraryError] = useState("");
+  const [libraryRequest, setLibraryRequest] = useState(0);
+  const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchController = useRef<AbortController | null>(null);
+  const searchSequence = useRef(0);
 
   // Editable fields
   const [editTitle, setEditTitle] = useState("");
@@ -105,69 +115,126 @@ export default function AddBookPage() {
   const [editPageCount, setEditPageCount] = useState("");
   const [editPublishedDate, setEditPublishedDate] = useState("");
 
-  // Fetch existing library books once
   useEffect(() => {
-    fetch("/api/books")
-      .then((r) => r.json())
-      .then((data) => {
-        setExistingBooks(
-          data.map((b: ExistingBook & { googleBooksId?: string }) => ({
-            id: b.id,
-            title: b.title,
-            authors: b.authors,
-            googleBooksId: b.googleBooksId,
-            isbn: b.isbn,
-          }))
-        );
+    const controller = new AbortController();
+    let active = true;
+    setLibraryStatus("loading");
+    setLibraryError("");
+
+    apiFetch<BookDto[]>("/api/books", { signal: controller.signal })
+      .then((books) => {
+        if (!active) return;
+        setExistingBooks(books);
+        setLibraryStatus("ready");
       })
-      .catch(() => {});
+      .catch((error: unknown) => {
+        if (!active || (error instanceof DOMException && error.name === "AbortError")) {
+          return;
+        }
+        setExistingBooks([]);
+        setLibraryStatus("error");
+        setLibraryError(
+          `${apiErrorMessage(error, "Unable to check the shared library")}. Retry to restore duplicate checking.`,
+        );
+      });
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [libraryRequest]);
+
+  useEffect(() => {
+    return () => {
+      searchSequence.current += 1;
+      if (searchTimeout.current) clearTimeout(searchTimeout.current);
+      searchController.current?.abort();
+    };
   }, []);
 
-  // Split results into matches and new
-  const { matchedResults, newResults } = useMemo(() => {
-    const matched: Array<SearchResult & { existingBookId: string }> = [];
-    const fresh: SearchResult[] = [];
+  const { matchedResults, addableResults } = useMemo(() => {
+    if (libraryStatus !== "ready") {
+      return {
+        matchedResults: [] as MatchedSearchResult[],
+        addableResults: results as AddableSearchResult[],
+      };
+    }
+
+    const matched: MatchedSearchResult[] = [];
+    const addable: AddableSearchResult[] = [];
 
     for (const result of results) {
-      const match = existingBooks.find((eb) => isExistingMatch(result, eb));
-      if (match) {
-        matched.push({ ...result, existingBookId: match.id });
+      const { bookId, conflict } = findEditionIdentityMatch(
+        result.id,
+        result.isbn,
+        existingBooks,
+      );
+      if (bookId && !conflict) {
+        matched.push({ ...result, existingBookId: bookId });
       } else {
-        fresh.push(result);
+        const possibleWork = existingBooks.find((book) =>
+          isPossibleWorkMatch(result, book),
+        );
+        addable.push({
+          ...result,
+          ...(conflict ? { identityConflict: true as const } : {}),
+          ...(possibleWork ? { possibleWorkTitle: possibleWork.title } : {}),
+        });
       }
     }
 
-    return { matchedResults: matched, newResults: fresh };
-  }, [results, existingBooks]);
+    return { matchedResults: matched, addableResults: addable };
+  }, [results, existingBooks, libraryStatus]);
 
   function handleSearchInput(value: string) {
     setQuery(value);
+    const trimmedQuery = value.trim();
+    const sequence = ++searchSequence.current;
     if (searchTimeout.current) clearTimeout(searchTimeout.current);
+    searchController.current?.abort();
+    searchController.current = null;
+    setResults([]);
+    setSearchError("");
 
-    if (value.trim().length < 2) {
-      setResults([]);
+    if (trimmedQuery.length < 2) {
+      setSearching(false);
       return;
     }
 
-    searchTimeout.current = setTimeout(() => doSearch(value), 400);
-  }
-
-  async function doSearch(q: string) {
     setSearching(true);
-    try {
-      const res = await fetch(`/api/books/search?q=${encodeURIComponent(q)}`);
-      if (res.ok) {
-        const data = await res.json();
-        setResults(data);
+    searchTimeout.current = setTimeout(async () => {
+      const controller = new AbortController();
+      searchController.current = controller;
+      try {
+        const data = await apiFetch<SearchBookDto[]>(
+          `/api/books/search?q=${encodeURIComponent(trimmedQuery)}`,
+          { signal: controller.signal },
+        );
+        if (sequence === searchSequence.current) {
+          setResults(data);
+          setSearchError("");
+        }
+      } catch (error) {
+        if (
+          sequence !== searchSequence.current ||
+          (error instanceof DOMException && error.name === "AbortError")
+        ) {
+          return;
+        }
+        setResults([]);
+        setSearchError(formatSearchError(error));
+      } finally {
+        if (sequence === searchSequence.current) {
+          setSearching(false);
+          if (searchController.current === controller) {
+            searchController.current = null;
+          }
+        }
       }
-    } catch (error) {
-      console.error("Search failed:", error);
-    } finally {
-      setSearching(false);
-    }
+    }, 400);
   }
 
-  function selectBook(book: SearchResult) {
+  function selectBook(book: SearchBookDto) {
     setSaveError("");
     setSelectedBook(book);
     setEditTitle(book.title);
@@ -196,43 +263,52 @@ export default function AddBookPage() {
     setSaving(true);
     setSaveError("");
     try {
+      const title = editMode ? editTitle.trim() : selectedBook?.title;
+      const authors = editMode
+        ? editAuthors.split(",").map((a) => a.trim()).filter(Boolean)
+        : selectedBook?.authors;
+      if (!title || !authors?.length) {
+        setSaveError("Title and at least one author are required");
+        return;
+      }
+
+      const isbn = editMode ? editIsbn.trim() : selectedBook?.isbn;
+      const description = editMode
+        ? editDescription.trim()
+        : selectedBook?.description;
+      const pageCount = editMode
+        ? editPageCount
+          ? Number.parseInt(editPageCount, 10)
+          : null
+        : selectedBook?.pageCount;
+      const publishedDate = editMode
+        ? editPublishedDate.trim()
+        : selectedBook?.publishedDate;
+      const googleBooksId = selectedBook
+        ? normalizeGoogleBooksId(selectedBook.id)
+        : null;
       const bookData = {
-        title: editMode ? editTitle : selectedBook?.title,
-        authors: editMode
-          ? editAuthors.split(",").map((a) => a.trim()).filter(Boolean)
-          : selectedBook?.authors,
-        isbn: editMode ? editIsbn || undefined : selectedBook?.isbn,
-        description: editMode
-          ? editDescription || undefined
-          : selectedBook?.description,
-        coverUrl: selectedBook?.coverUrl,
-        pageCount: editMode
-          ? editPageCount
-            ? parseInt(editPageCount)
-            : undefined
-          : selectedBook?.pageCount,
-        publishedDate: editMode
-          ? editPublishedDate || undefined
-          : selectedBook?.publishedDate,
-        categories: selectedBook?.categories,
-        googleBooksId: selectedBook?.id,
+        title,
+        authors,
+        ...(isbn ? { isbn } : {}),
+        ...(description ? { description } : {}),
+        ...(selectedBook?.coverUrl ? { coverUrl: selectedBook.coverUrl } : {}),
+        ...(pageCount ? { pageCount } : {}),
+        ...(publishedDate ? { publishedDate } : {}),
+        ...(selectedBook?.categories.length
+          ? { categories: selectedBook.categories }
+          : {}),
+        ...(googleBooksId ? { googleBooksId } : {}),
       };
 
-      const res = await fetch("/api/books", {
+      const data = await apiFetch<CreateBookDto>("/api/books", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(bookData),
       });
-
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        setSaveError(data?.error || "Failed to add book");
-        return;
-      }
       router.push(`/book/${data.bookId}`);
     } catch (error) {
-      console.error("Failed to add book:", error);
-      setSaveError("Failed to add book");
+      setSaveError(apiErrorMessage(error, "Failed to add book. Please try again."));
     } finally {
       setSaving(false);
     }
@@ -387,6 +463,30 @@ export default function AddBookPage() {
               )}
             </div>
 
+            {libraryStatus === "error" && (
+              <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                <p>{libraryError}</p>
+                <button
+                  onClick={() => setLibraryRequest((request) => request + 1)}
+                  className="flex-shrink-0 font-medium underline decoration-amber-300 hover:text-amber-950"
+                >
+                  Retry
+                </button>
+              </div>
+            )}
+
+            {searchError && (
+              <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                <p>{searchError}</p>
+                <button
+                  onClick={() => handleSearchInput(query)}
+                  className="flex-shrink-0 font-medium underline decoration-red-300 hover:text-red-900"
+                >
+                  Retry search
+                </button>
+              </div>
+            )}
+
             {/* Results */}
             {results.length > 0 && (
               <div className="mb-6">
@@ -436,19 +536,19 @@ export default function AddBookPage() {
                 )}
 
                 {/* New books section */}
-                {newResults.length > 0 && (
+                {addableResults.length > 0 && (
                   <>
-                    {matchedResults.length > 0 && (
+                    {(matchedResults.length > 0 || libraryStatus !== "ready") && (
                       <div className="flex items-center gap-2 mb-2 px-1">
                         <Plus className="w-4 h-4 text-warm-400" />
                         <span className="text-xs font-medium text-warm-500 uppercase tracking-wider">
-                          Add new
+                          {libraryStatus === "ready" ? "Add new" : "Search results"}
                         </span>
                         <div className="flex-1 h-[1px] bg-warm-200" />
                       </div>
                     )}
                     <div className="space-y-2">
-                      {newResults.map((book, i) => (
+                      {addableResults.map((book, i) => (
                         <motion.button
                           key={book.id}
                           initial={{ opacity: 0, x: -20 }}
@@ -472,6 +572,26 @@ export default function AddBookPage() {
                             {book.publishedDate && (
                               <p className="text-warm-400 text-xs mt-0.5">{book.publishedDate}</p>
                             )}
+                            {book.possibleWorkTitle && (
+                              <p className="text-amber-700/80 text-xs mt-1">
+                                Possible match to another edition of &quot;{book.possibleWorkTitle}&quot;
+                              </p>
+                            )}
+                            {book.identityConflict && (
+                              <p className="text-red-700/80 text-xs mt-1">
+                                Conflicting edition identifiers. Select this result to review the server error.
+                              </p>
+                            )}
+                            {libraryStatus === "loading" && (
+                              <p className="text-warm-400 text-xs mt-1 italic">
+                                Checking the shared library for matches
+                              </p>
+                            )}
+                            {libraryStatus === "error" && (
+                              <p className="text-amber-700/80 text-xs mt-1 italic">
+                                Library match status unavailable
+                              </p>
+                            )}
                           </div>
                           <Plus className="w-5 h-5 text-warm-400 flex-shrink-0" />
                         </motion.button>
@@ -483,10 +603,10 @@ export default function AddBookPage() {
             )}
 
             {/* No results */}
-            {query.length >= 2 && !searching && results.length === 0 && (
+            {query.trim().length >= 2 && !searching && !searchError && results.length === 0 && (
               <div className="text-center py-8">
                 <p className="text-warm-500 text-sm mb-2">
-                  No books found for &quot;{query}&quot;
+                  No books found for &quot;{query.trim()}&quot;
                 </p>
               </div>
             )}

@@ -3,12 +3,14 @@ import { db } from "@/lib/db";
 import { books, userBooks, users } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { getSession } from "@/lib/auth";
-import { safeCoverUrl } from "@/lib/validation";
+import { apiError, withApiErrorBoundary } from "@/lib/api-response";
+import { toReadingEntryDto } from "@/lib/book-dto";
 
 export async function GET() {
+  return withApiErrorBoundary(async () => {
   const session = await getSession();
   if (!session) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return apiError("UNAUTHORIZED", "Unauthorized", 401);
   }
 
   const results = await db
@@ -23,22 +25,8 @@ export async function GET() {
     .where(eq(userBooks.currentlyReading, true))
     .all();
 
-  return NextResponse.json(
-    results.map((r) => ({
-      book: {
-        id: r.book.id,
-        title: r.book.title,
-        authors: JSON.parse(r.book.authors),
-        coverUrl: safeCoverUrl(r.book.coverUrl),
-        spineColor: r.book.spineColor,
-        pageCount: r.book.pageCount,
-      },
-      user: {
-        id: r.user.id,
-        firstName: r.user.firstName,
-        lastName: r.user.lastName,
-        avatarColor: r.user.avatarColor,
-      },
-    }))
-  );
+    return NextResponse.json(
+    results.map((result) => toReadingEntryDto(result.book, result.user)),
+    );
+  }, "Reading list error", "Failed to load current reading activity");
 }

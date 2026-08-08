@@ -1,10 +1,20 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { BookOpen, Eye, EyeOff } from "lucide-react";
+import { ApiError, apiErrorMessage, apiFetch } from "@/lib/api-client";
+
+type SetupStatusDto = { needsSetup: boolean };
+type AuthSuccessDto = { success: true };
+type SetupSuccessDto = AuthSuccessDto & { inviteToken: string };
+
+type SetupRequest =
+  | { status: "loading" }
+  | { status: "success"; needsSetup: boolean }
+  | { status: "error"; message: string };
 
 export default function LoginPage() {
   const router = useRouter();
@@ -13,23 +23,56 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [isSetup, setIsSetup] = useState(false);
-  const [checkingSetup, setCheckingSetup] = useState(true);
+  const [setupRequest, setSetupRequest] = useState<SetupRequest>({
+    status: "loading",
+  });
+  const setupRequestController = useRef<AbortController | null>(null);
 
   // First-time setup fields
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [setupInviteToken, setSetupInviteToken] = useState("");
 
-  useEffect(() => {
-    fetch("/api/auth/check-setup")
-      .then((r) => r.json())
-      .then((data) => {
-        setIsSetup(!data.needsSetup);
-        setCheckingSetup(false);
-      })
-      .catch(() => setCheckingSetup(false));
+  const checkSetup = useCallback(async () => {
+    setupRequestController.current?.abort();
+    const controller = new AbortController();
+    setupRequestController.current = controller;
+    setSetupRequest({ status: "loading" });
+
+    try {
+      const data = await apiFetch<SetupStatusDto>(
+        "/api/auth/check-setup",
+        { signal: controller.signal },
+        { redirectOnUnauthorized: false },
+      );
+      if (!controller.signal.aborted) {
+        setSetupRequest({ status: "success", needsSetup: data.needsSetup });
+      }
+    } catch (error) {
+      if (
+        controller.signal.aborted ||
+        (error instanceof DOMException && error.name === "AbortError")
+      ) {
+        return;
+      }
+      setSetupRequest({
+        status: "error",
+        message: apiErrorMessage(
+          error,
+          "Unable to check whether BookShare is set up",
+        ),
+      });
+    } finally {
+      if (setupRequestController.current === controller) {
+        setupRequestController.current = null;
+      }
+    }
   }, []);
+
+  useEffect(() => {
+    void checkSetup();
+    return () => setupRequestController.current?.abort();
+  }, [checkSetup]);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -37,22 +80,20 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error);
-        return;
-      }
+      await apiFetch<AuthSuccessDto>(
+        "/api/auth/login",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password }),
+        },
+        { redirectOnUnauthorized: false },
+      );
 
       router.push("/library");
       router.refresh();
-    } catch {
-      setError("Something went wrong");
+    } catch (error) {
+      setError(apiErrorMessage(error, "Unable to sign in"));
     } finally {
       setLoading(false);
     }
@@ -64,27 +105,30 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const res = await fetch("/api/auth/setup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, firstName, lastName, password }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error);
-        return;
-      }
+      const data = await apiFetch<SetupSuccessDto>(
+        "/api/auth/setup",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, firstName, lastName, password }),
+        },
+        { redirectOnUnauthorized: false },
+      );
 
       setSetupInviteToken(data.inviteToken);
-    } catch {
-      setError("Something went wrong");
+    } catch (error) {
+      if (error instanceof ApiError && error.code === "SETUP_COMPLETED") {
+        await checkSetup();
+        setError("Setup was completed in another tab. Sign in to continue.");
+      } else {
+        setError(apiErrorMessage(error, "Unable to create the library"));
+      }
     } finally {
       setLoading(false);
     }
   }
 
-  if (checkingSetup) {
+  if (setupRequest.status === "loading") {
     return (
       <div className="min-h-screen bg-cream flex items-center justify-center">
         <motion.div
@@ -96,6 +140,28 @@ export default function LoginPage() {
       </div>
     );
   }
+
+  if (setupRequest.status === "error") {
+    return (
+      <div className="min-h-screen bg-cream flex items-center justify-center p-4">
+        <div className="card-warm p-8 max-w-md w-full text-center">
+          <BookOpen className="w-8 h-8 text-warm-500 mx-auto mb-4" />
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+            {setupRequest.message}
+          </div>
+          <button
+            type="button"
+            onClick={() => void checkSetup()}
+            className="w-full bg-warm-700 text-cream py-3 rounded-lg font-medium hover:bg-warm-800 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const isSetup = !setupRequest.needsSetup;
 
   if (setupInviteToken) {
     return (

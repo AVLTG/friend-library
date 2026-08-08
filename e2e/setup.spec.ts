@@ -29,11 +29,51 @@ test("the first user can create the library", async ({ page, browser }) => {
     data: {
       title: "The Test Book",
       authors: ["Test Author"],
+      isbn: "978-1-4434-1106-6",
       pageCount: 240,
     },
   });
-  expect(addResponse.ok()).toBe(true);
-  const { bookId } = (await addResponse.json()) as { bookId: string };
+  expect(addResponse.status()).toBe(201);
+  const addResult = (await addResponse.json()) as {
+    bookId: string;
+    bookCreated: boolean;
+    relationshipCreated: boolean;
+  };
+  expect(addResult).toMatchObject({
+    bookCreated: true,
+    relationshipCreated: true,
+  });
+  const { bookId } = addResult;
+
+  const attachResponse = await page.request.post("/api/books", {
+    headers: { Origin: baseURL },
+    data: {
+      title: "The Test Book, Alternate Search Result",
+      authors: ["Test Author"],
+      isbn: "9781443411066",
+      googleBooksId: "alternate-google-result",
+    },
+  });
+  expect(attachResponse.status()).toBe(200);
+  expect(await attachResponse.json()).toMatchObject({
+    bookId,
+    bookCreated: false,
+    relationshipCreated: false,
+    owned: true,
+  });
+  const aliasResponse = await page.request.post("/api/books", {
+    headers: { Origin: baseURL },
+    data: {
+      title: "Google-only Follow-up",
+      authors: ["Test Author"],
+      googleBooksId: "alternate-google-result",
+    },
+  });
+  expect(aliasResponse.status()).toBe(200);
+  expect(await aliasResponse.json()).toMatchObject({
+    bookId,
+    bookCreated: false,
+  });
 
   await page.goto(`/book/${bookId}`);
   await expect(
@@ -43,6 +83,50 @@ test("the first user can create the library", async ({ page, browser }) => {
   await expect(
     page.getByRole("button", { name: "Currently reading" }),
   ).toHaveClass(/bg-warm-700/);
+
+  const conflictingReadingState = await page.request.patch(`/api/books/${bookId}`, {
+    headers: { Origin: baseURL },
+    data: { read: true, currentlyReading: true },
+  });
+  expect(conflictingReadingState.status()).toBe(400);
+  expect(await conflictingReadingState.json()).toMatchObject({
+    code: "INVALID_READING_STATE",
+  });
+
+  const saveReview = await page.request.patch(`/api/books/${bookId}`, {
+    headers: { Origin: baseURL },
+    data: { rating: 4.5, review: "A useful test review" },
+  });
+  expect(saveReview.ok()).toBe(true);
+  expect(await saveReview.json()).toMatchObject({
+    rating: 4.5,
+    review: "A useful test review",
+  });
+
+  const invalidReviewClear = await page.request.patch(`/api/books/${bookId}`, {
+    headers: { Origin: baseURL },
+    data: { rating: null },
+  });
+  expect(invalidReviewClear.status()).toBe(400);
+  expect(await invalidReviewClear.json()).toMatchObject({
+    code: "INVALID_REVIEW_STATE",
+  });
+
+  const clearReview = await page.request.patch(`/api/books/${bookId}`, {
+    headers: { Origin: baseURL },
+    data: { rating: null, review: null },
+  });
+  expect(clearReview.ok()).toBe(true);
+  expect(await clearReview.json()).toMatchObject({ rating: null, review: null });
+
+  const detailDto = await (await page.request.get(`/api/books/${bookId}`)).json();
+  expect(detailDto).toMatchObject({
+    isbn: "9781443411066",
+    authors: ["Test Author"],
+    currentUserBook: { owned: true },
+  });
+  expect(detailDto.currentUserBook).not.toHaveProperty("id");
+  expect(detailDto.currentUserBook).not.toHaveProperty("userId");
 
   const usernameWithoutPassword = await page.request.patch(
     "/api/auth/account",

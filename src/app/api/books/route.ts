@@ -1,9 +1,19 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { books, userBooks, users } from "@/lib/db/schema";
+import { bookGoogleIds, books, userBooks, users } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { getSession, generateId, randomSpineColor } from "@/lib/auth";
-import { createBookWithOwner } from "@/lib/book-write";
+import {
+  BookIdentityConflictError,
+  createOrAttachBook,
+} from "@/lib/book-write";
+import { normalizeGoogleBooksId, normalizeIsbn } from "@/lib/book-identity";
+import { toBookDto } from "@/lib/book-dto";
+import {
+  apiError,
+  requestBodyErrorResponse,
+  withApiErrorBoundary,
+} from "@/lib/api-response";
 import { sanitizeText } from "@/lib/sanitize";
 import {
   addBookSchema,
@@ -13,9 +23,10 @@ import {
 } from "@/lib/validation";
 
 export async function GET() {
+  return withApiErrorBoundary(async () => {
   const session = await getSession();
   if (!session) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return apiError("UNAUTHORIZED", "Unauthorized", 401);
   }
 
   const allBooks = await db.select().from(books).all();
@@ -32,82 +43,39 @@ export async function GET() {
         .innerJoin(users, eq(userBooks.userId, users.id))
         .where(eq(userBooks.bookId, book.id))
         .all();
+      const googleAliases = await db
+        .select({ googleBooksId: bookGoogleIds.googleBooksId })
+        .from(bookGoogleIds)
+        .where(eq(bookGoogleIds.bookId, book.id))
+        .all();
 
-      return {
-        ...book,
-        coverUrl: safeCoverUrl(book.coverUrl),
-        authors: JSON.parse(book.authors),
-        categories: book.categories ? JSON.parse(book.categories) : [],
-        owners: bookUsers
-          .filter((ub) => ub.userBook.owned)
-          .map((ub) => ({
-            id: ub.user.id,
-            username: ub.user.username,
-            firstName: ub.user.firstName,
-            avatarColor: ub.user.avatarColor,
-          })),
-        readers: bookUsers
-          .filter((ub) => ub.userBook.read)
-          .map((ub) => ({
-            id: ub.user.id,
-            username: ub.user.username,
-            firstName: ub.user.firstName,
-            avatarColor: ub.user.avatarColor,
-          })),
-        annotators: bookUsers
-          .filter((ub) => ub.userBook.annotated)
-          .map((ub) => ({
-            id: ub.user.id,
-            username: ub.user.username,
-            firstName: ub.user.firstName,
-            avatarColor: ub.user.avatarColor,
-          })),
-        currentlyReading: bookUsers
-          .filter((ub) => ub.userBook.currentlyReading)
-          .map((ub) => ({
-            id: ub.user.id,
-            username: ub.user.username,
-            firstName: ub.user.firstName,
-            avatarColor: ub.user.avatarColor,
-          })),
-        ratings: bookUsers
-          .filter((ub) => ub.userBook.rating !== null)
-          .map((ub) => ({
-            userId: ub.user.id,
-            username: ub.user.username,
-            firstName: ub.user.firstName,
-            avatarColor: ub.user.avatarColor,
-            rating: ub.userBook.rating,
-            review: ub.userBook.review,
-          })),
-        averageRating:
-          bookUsers.filter((ub) => ub.userBook.rating !== null).length > 0
-            ? bookUsers
-                .filter((ub) => ub.userBook.rating !== null)
-                .reduce((sum, ub) => sum + (ub.userBook.rating || 0), 0) /
-              bookUsers.filter((ub) => ub.userBook.rating !== null).length
-            : null,
-        currentUserBook: bookUsers.find(
-          (ub) => ub.user.id === session.userId
-        )?.userBook || null,
-      };
+      return toBookDto(
+        book,
+        bookUsers,
+        session.userId,
+        googleAliases.map((alias) => alias.googleBooksId),
+      );
     })
   );
 
-  return NextResponse.json(booksWithDetails);
+    return NextResponse.json(booksWithDetails);
+  }, "List books error", "Failed to load books");
 }
 
 export async function POST(request: Request) {
-  const session = await getSession();
-  if (!session) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
   try {
+    const session = await getSession();
+    if (!session) {
+      return apiError("UNAUTHORIZED", "Unauthorized", 401);
+    }
     const body = await parseJsonBody(request, addBookSchema, 262_144);
     const title = sanitizeText(body.title, 500);
     const authors = body.authors.map((author) => sanitizeText(author, 200)).filter(Boolean);
-    const isbn = body.isbn ? sanitizeText(body.isbn, 20) : undefined;
+    const rawIsbn = body.isbn || "";
+    const isbn = rawIsbn ? normalizeIsbn(rawIsbn) : undefined;
+    if (rawIsbn && !isbn) {
+      return apiError("INVALID_ISBN", "ISBN must be a valid ISBN-10 or ISBN-13", 400);
+    }
     const description = body.description ? sanitizeText(body.description, 5000) : undefined;
     const coverUrl = safeCoverUrl(body.coverUrl) || undefined;
     const pageCount = body.pageCount;
@@ -115,44 +83,26 @@ export async function POST(request: Request) {
     const categories = body.categories
       ? body.categories.map((category) => sanitizeText(category, 100)).filter(Boolean)
       : undefined;
-    const googleBooksId = body.googleBooksId ? sanitizeText(body.googleBooksId, 50) : undefined;
+    const rawGoogleBooksId = body.googleBooksId
+      ? sanitizeText(body.googleBooksId, 50)
+      : "";
+    const googleBooksId = rawGoogleBooksId
+      ? normalizeGoogleBooksId(rawGoogleBooksId)
+      : undefined;
+    if (rawGoogleBooksId && !googleBooksId) {
+      return apiError("INVALID_GOOGLE_BOOKS_ID", "Invalid Google Books ID", 400);
+    }
 
     if (!title || authors.length === 0) {
-      return NextResponse.json(
-        { error: "Title and at least one author are required" },
-        { status: 400 }
+      return apiError(
+        "INVALID_REQUEST",
+        "Title and at least one author are required",
+        400,
       );
     }
 
-    // Check if book already exists (by Google Books ID or ISBN)
-    if (googleBooksId) {
-      const existing = await db
-        .select()
-        .from(books)
-        .where(eq(books.googleBooksId, googleBooksId))
-        .get();
-
-      if (existing) {
-        // Book exists, just add user relationship
-        await db
-          .insert(userBooks)
-          .values({
-            id: generateId(),
-            userId: session.userId,
-            bookId: existing.id,
-            owned: true,
-          })
-          .onConflictDoUpdate({
-            target: [userBooks.userId, userBooks.bookId],
-            set: { owned: true, updatedAt: new Date() },
-          });
-
-        return NextResponse.json({ bookId: existing.id, alreadyExisted: true });
-      }
-    }
-
     const bookId = generateId();
-    await createBookWithOwner(
+    const result = await createOrAttachBook(
       {
         id: bookId,
         googleBooksId,
@@ -175,15 +125,15 @@ export async function POST(request: Request) {
       },
     );
 
-    return NextResponse.json({ bookId, alreadyExisted: false });
+    return NextResponse.json(result, { status: result.bookCreated ? 201 : 200 });
   } catch (error) {
     if (error instanceof RequestBodyError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
+      return requestBodyErrorResponse(error);
+    }
+    if (error instanceof BookIdentityConflictError) {
+      return apiError("IDENTITY_CONFLICT", error.message, 409);
     }
     console.error("Add book error:", error);
-    return NextResponse.json(
-      { error: "Failed to add book" },
-      { status: 500 }
-    );
+    return apiError("INTERNAL_ERROR", "Failed to add book", 500);
   }
 }

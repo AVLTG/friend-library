@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import { count } from "drizzle-orm";
+import { apiError } from "@/lib/api-response";
 
 export async function GET() {
   try {
@@ -11,9 +12,10 @@ export async function GET() {
     });
   } catch (error) {
     console.error("Setup check error:", error);
-    return NextResponse.json(
-      { error: "Database is temporarily unavailable" },
-      { status: 503 },
+    return apiError(
+      "SERVICE_UNAVAILABLE",
+      "Database is temporarily unavailable",
+      503,
     );
   }
 }
