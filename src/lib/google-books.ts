@@ -6,7 +6,7 @@ function truncate(value: string | undefined, maxLength: number) {
 }
 
 function normalizeAuthors(authors: string[] | undefined): string[] {
-  return (authors || ["Unknown Author"])
+  return (authors?.length ? authors : ["Unknown Author"])
     .slice(0, 20)
     .map((author) => author.slice(0, 200));
 }
@@ -104,7 +104,9 @@ export async function searchBooks(query: string): Promise<GoogleBookResult[]> {
       isbn: truncate(isbnValue, 20),
       coverUrl: safeCoverUrl(coverUrl) || undefined,
       pageCount:
-        info.pageCount && info.pageCount > 0 ? info.pageCount : undefined,
+        info.pageCount && info.pageCount > 0 && info.pageCount <= 99999
+          ? info.pageCount
+          : undefined,
       publishedDate: truncate(info.publishedDate, 20),
       categories: normalizeCategories(info.categories),
     };
@@ -151,7 +153,9 @@ export async function getBookById(
     isbn: truncate(isbnValue, 20),
     coverUrl: safeCoverUrl(coverUrl) || undefined,
     pageCount:
-      info.pageCount && info.pageCount > 0 ? info.pageCount : undefined,
+      info.pageCount && info.pageCount > 0 && info.pageCount <= 99999
+        ? info.pageCount
+        : undefined,
     publishedDate: truncate(info.publishedDate, 20),
     categories: normalizeCategories(info.categories),
   };

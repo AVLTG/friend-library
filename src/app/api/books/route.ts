@@ -103,7 +103,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const body = await parseJsonBody(request, addBookSchema, 16_384);
+    const body = await parseJsonBody(request, addBookSchema, 262_144);
     const title = sanitizeText(body.title, 500);
     const authors = body.authors.map((author) => sanitizeText(author, 200)).filter(Boolean);
     const isbn = body.isbn ? sanitizeText(body.isbn, 20) : undefined;

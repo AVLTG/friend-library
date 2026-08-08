@@ -38,6 +38,20 @@ try {
   }
   await client.execute("ALTER TABLE user_books ADD COLUMN review text");
 
+  await client.execute(
+    "CREATE UNIQUE INDEX unexpected_review_unique ON user_books(review)",
+  );
+  let extraIndexRejected = false;
+  try {
+    await adoptBaseline(client, projectRoot);
+  } catch (error) {
+    extraIndexRejected = /index/.test(String(error));
+  }
+  if (!extraIndexRejected) {
+    throw new Error("Baseline adoption accepted an extra unique index");
+  }
+  await client.execute("DROP INDEX unexpected_review_unique");
+
   await client.execute({
     sql: `INSERT INTO users
       (id, username, first_name, last_name, password_hash, avatar_color, created_at)

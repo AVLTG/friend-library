@@ -83,6 +83,14 @@ export function getAllowedOrigins(): Set<string> {
   if (process.env.VERCEL_ENV === "preview" && process.env.VERCEL_URL) {
     origins.add(parseOrigin(`https://${process.env.VERCEL_URL}`, "VERCEL_URL"));
   }
+  if (process.env.VERCEL_ENV === "preview" && process.env.VERCEL_BRANCH_URL) {
+    origins.add(
+      parseOrigin(
+        `https://${process.env.VERCEL_BRANCH_URL}`,
+        "VERCEL_BRANCH_URL",
+      ),
+    );
+  }
 
   return origins;
 }

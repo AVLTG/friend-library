@@ -25,6 +25,14 @@ describe("Google Books normalization", () => {
                   categories: Array.from({ length: 60 }, () => "C".repeat(120)),
                 },
               },
+              {
+                id: "edge-case-id",
+                volumeInfo: {
+                  title: "Edge Case",
+                  authors: [],
+                  pageCount: 100000,
+                },
+              },
             ],
           }),
           { status: 200, headers: { "Content-Type": "application/json" } },
@@ -32,7 +40,7 @@ describe("Google Books normalization", () => {
       ),
     );
 
-    const [book] = await searchBooks("test");
+    const [book, edgeCase] = await searchBooks("test");
     expect(book.title).toHaveLength(500);
     expect(book.authors).toHaveLength(20);
     expect(book.authors[0]).toHaveLength(200);
@@ -40,5 +48,7 @@ describe("Google Books normalization", () => {
     expect(book.publishedDate).toHaveLength(20);
     expect(book.categories).toHaveLength(50);
     expect(book.categories?.[0]).toHaveLength(100);
+    expect(edgeCase.authors).toEqual(["Unknown Author"]);
+    expect(edgeCase.pageCount).toBeUndefined();
   });
 });

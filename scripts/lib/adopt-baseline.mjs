@@ -51,9 +51,11 @@ const baselineSchema = {
   },
 };
 
-const requiredUniqueIndexes = {
-  invite_tokens: [["token"]],
-  users: [["username"]],
+const expectedIndexes = {
+  books: [["id"]],
+  invite_tokens: [["id"], ["token"]],
+  user_books: [["id"]],
+  users: [["id"], ["username"]],
 };
 
 const requiredForeignKeys = {
@@ -108,24 +110,56 @@ async function verifyColumns(client, tableName, expectedColumns) {
   }
 }
 
-async function verifyUniqueIndexes(client, tableName, expectedIndexes) {
+async function verifyIndexes(client, tableName, expected) {
   const indexList = await client.execute(`PRAGMA index_list('${tableName}')`);
-  const uniqueColumns = [];
-
-  for (const index of indexList.rows.filter((row) => Number(row.unique) === 1)) {
-    const details = await client.execute(`PRAGMA index_info('${String(index.name)}')`);
-    uniqueColumns.push(details.rows.map((row) => String(row.name)));
+  if (indexList.rows.length !== expected.length) {
+    throw new Error(`Baseline index count differs for ${tableName}`);
   }
 
-  for (const expected of expectedIndexes) {
-    if (!uniqueColumns.some((columns) => columns.join("|") === expected.join("|"))) {
-      throw new Error(`Required unique index is missing: ${tableName}(${expected.join(",")})`);
+  const actualIndexes = [];
+
+  for (const index of indexList.rows) {
+    if (Number(index.unique) !== 1 || Number(index.partial) !== 0) {
+      throw new Error(`Unexpected baseline index definition for ${tableName}`);
     }
+
+    const details = await client.execute(
+      `PRAGMA index_xinfo('${String(index.name)}')`,
+    );
+    const keyColumns = details.rows.filter((row) => Number(row.key) === 1);
+    if (
+      keyColumns.some(
+        (row) =>
+          String(row.coll).toUpperCase() !== "BINARY" || Number(row.desc) !== 0,
+      )
+    ) {
+      throw new Error(`Unexpected index collation or ordering for ${tableName}`);
+    }
+    actualIndexes.push(keyColumns.map((row) => String(row.name)));
+  }
+
+  for (const expectedColumns of expected) {
+    const matchIndex = actualIndexes.findIndex(
+      (columns) => columns.join("|") === expectedColumns.join("|"),
+    );
+    if (matchIndex === -1) {
+      throw new Error(
+        `Required unique index is missing: ${tableName}(${expectedColumns.join(",")})`,
+      );
+    }
+    actualIndexes.splice(matchIndex, 1);
+  }
+
+  if (actualIndexes.length > 0) {
+    throw new Error(`Unexpected baseline index exists for ${tableName}`);
   }
 }
 
 async function verifyForeignKeys(client, tableName, expectedKeys) {
   const result = await client.execute(`PRAGMA foreign_key_list('${tableName}')`);
+  if (result.rows.length !== expectedKeys.length) {
+    throw new Error(`Baseline foreign-key count differs for ${tableName}`);
+  }
 
   for (const [from, targetTable, to] of expectedKeys) {
     const matches = result.rows.some(
@@ -164,12 +198,17 @@ export async function verifyBaselineSchema(client) {
   }
 
   for (const [tableName, columns] of Object.entries(baselineSchema)) {
+    const tableDefinition = await client.execute({
+      sql: "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?",
+      args: [tableName],
+    });
+    const createSql = String(tableDefinition.rows[0]?.sql ?? "");
+    if (/\b(CHECK|COLLATE|STRICT)\b|\bWITHOUT\s+ROWID\b/i.test(createSql)) {
+      throw new Error(`Unexpected table constraint exists for ${tableName}`);
+    }
+
     await verifyColumns(client, tableName, columns);
-    await verifyUniqueIndexes(
-      client,
-      tableName,
-      requiredUniqueIndexes[tableName] ?? [],
-    );
+    await verifyIndexes(client, tableName, expectedIndexes[tableName]);
     await verifyForeignKeys(
       client,
       tableName,

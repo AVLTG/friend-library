@@ -99,5 +99,15 @@ test("the first user can create the library", async ({ page }) => {
   expect(registrationResponses.map((response) => response.status()).sort()).toEqual([
     200, 400,
   ]);
+  const rejectedRegistration = registrationResponses.find(
+    (response) => response.status() === 400,
+  );
+  expect(rejectedRegistration).toBeDefined();
+  expect(await rejectedRegistration!.json()).toMatchObject({
+    error: expect.stringMatching(/already used|Invalid/),
+  });
+  const usersResponse = await page.request.get("/api/users");
+  expect(usersResponse.ok()).toBe(true);
+  expect(await usersResponse.json()).toHaveLength(2);
   await Promise.all(registrationContexts.map((context) => context.dispose()));
 });

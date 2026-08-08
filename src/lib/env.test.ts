@@ -41,4 +41,19 @@ describe("environment validation", () => {
     vi.stubEnv("APP_ORIGIN", "https://bookshare.example/path");
     expect(() => getAllowedOrigins()).toThrow(/origin/);
   });
+
+  it("allows Vercel preview and stable branch origins", () => {
+    vi.stubEnv("APP_ORIGIN", "https://bookshare.example");
+    vi.stubEnv("VERCEL_ENV", "preview");
+    vi.stubEnv("VERCEL_URL", "friend-library-git-sha.vercel.app");
+    vi.stubEnv("VERCEL_BRANCH_URL", "friend-library-git-feature.vercel.app");
+
+    expect(getAllowedOrigins()).toEqual(
+      new Set([
+        "https://bookshare.example",
+        "https://friend-library-git-sha.vercel.app",
+        "https://friend-library-git-feature.vercel.app",
+      ]),
+    );
+  });
 });

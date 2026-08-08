@@ -1,8 +1,5 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import { db } from "@/lib/db";
-import { users, inviteTokens } from "@/lib/db/schema";
-import { count } from "drizzle-orm";
 import {
   createSession,
   setSessionCookie,
@@ -14,6 +11,10 @@ import {
 import { sanitizeName, sanitizeText } from "@/lib/sanitize";
 import { checkRateLimit, getClientIp, AUTH_LIMIT } from "@/lib/rate-limit";
 import { parseJsonBody, RequestBodyError, setupSchema } from "@/lib/validation";
+import {
+  createInitialUserAndInvite,
+  InitialSetupAlreadyCompletedError,
+} from "@/lib/initial-setup";
 
 // First-time setup: creates the first admin user (no invite needed)
 export async function POST(request: Request) {
@@ -38,15 +39,6 @@ export async function POST(request: Request) {
   }
 
   try {
-    const userCount = await db.select({ count: count() }).from(users).get();
-
-    if (userCount && userCount.count > 0) {
-      return NextResponse.json(
-        { error: "Setup already completed" },
-        { status: 400 }
-      );
-    }
-
     const body = await parseJsonBody(request, setupSchema);
     const username = sanitizeText(body.username, 20);
     const firstName = sanitizeName(body.firstName);
@@ -75,22 +67,22 @@ export async function POST(request: Request) {
     const userId = generateId();
     const passwordHash = await bcrypt.hash(password, 12);
 
-    await db.insert(users).values({
-      id: userId,
-      username: username.toLowerCase(),
-      firstName,
-      lastName,
-      passwordHash,
-      avatarColor: randomAvatarColor(),
-    });
-
-    // Generate first invite token for the admin to share
     const token = generateInviteToken();
-    await db.insert(inviteTokens).values({
-      id: generateId(),
-      token,
-      createdBy: userId,
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
+    await createInitialUserAndInvite({
+      user: {
+        id: userId,
+        username: username.toLowerCase(),
+        firstName,
+        lastName,
+        passwordHash,
+        avatarColor: randomAvatarColor(),
+      },
+      invite: {
+        id: generateId(),
+        token,
+        createdBy: userId,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      },
     });
 
     const sessionToken = await createSession({
@@ -111,6 +103,12 @@ export async function POST(request: Request) {
   } catch (error) {
     if (error instanceof RequestBodyError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    if (error instanceof InitialSetupAlreadyCompletedError) {
+      return NextResponse.json(
+        { error: "Setup already completed" },
+        { status: 400 },
+      );
     }
     console.error("Setup error:", error);
     return NextResponse.json(
