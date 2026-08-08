@@ -1,14 +1,16 @@
 import { drizzle } from "drizzle-orm/libsql";
-import { createClient, type Client } from "@libsql/client";
+import { createClient, type Client } from "@libsql/client/node";
 import * as schema from "./schema";
+import { getTursoConfig } from "../env";
 
 let client: Client | null = null;
 
 function getClient(): Client {
   if (!client) {
+    const { url, authToken } = getTursoConfig();
     client = createClient({
-      url: process.env.TURSO_DATABASE_URL!,
-      authToken: process.env.TURSO_AUTH_TOKEN,
+      url,
+      authToken,
     });
   }
   return client;

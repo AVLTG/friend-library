@@ -3,7 +3,14 @@ import { db } from "@/lib/db";
 import { books, userBooks, users } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getSession, generateId } from "@/lib/auth";
-import { sanitizeReview, validateRating } from "@/lib/sanitize";
+import { sanitizeReview } from "@/lib/sanitize";
+import {
+  generatedIdSchema,
+  parseJsonBody,
+  RequestBodyError,
+  safeCoverUrl,
+  updateBookSchema,
+} from "@/lib/validation";
 
 export async function GET(
   _request: Request,
@@ -15,6 +22,9 @@ export async function GET(
   }
 
   const { id } = await params;
+  if (!generatedIdSchema.safeParse(id).success) {
+    return NextResponse.json({ error: "Invalid book ID" }, { status: 400 });
+  }
 
   const book = await db.select().from(books).where(eq(books.id, id)).get();
 
@@ -34,6 +44,7 @@ export async function GET(
 
   return NextResponse.json({
     ...book,
+    coverUrl: safeCoverUrl(book.coverUrl),
     authors: JSON.parse(book.authors),
     categories: book.categories ? JSON.parse(book.categories) : [],
     owners: bookUsers
@@ -107,10 +118,27 @@ export async function PATCH(
   }
 
   const { id } = await params;
-  const body = await request.json();
-  const { owned, read, currentlyReading, annotated } = body;
-  const rating = body.rating !== undefined ? validateRating(body.rating) : undefined;
-  const review = body.review !== undefined ? sanitizeReview(body.review) : undefined;
+  if (!generatedIdSchema.safeParse(id).success) {
+    return NextResponse.json({ error: "Invalid book ID" }, { status: 400 });
+  }
+
+  let body;
+  try {
+    body = await parseJsonBody(request, updateBookSchema, 8_192);
+  } catch (error) {
+    if (error instanceof RequestBodyError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    throw error;
+  }
+
+  const { owned, read, currentlyReading, annotated, rating } = body;
+  const review =
+    body.review === null
+      ? null
+      : body.review !== undefined
+        ? sanitizeReview(body.review)
+        : undefined;
 
   const book = await db.select().from(books).where(eq(books.id, id)).get();
   if (!book) {
@@ -187,6 +215,9 @@ export async function DELETE(
   }
 
   const { id } = await params;
+  if (!generatedIdSchema.safeParse(id).success) {
+    return NextResponse.json({ error: "Invalid book ID" }, { status: 400 });
+  }
 
   const book = await db.select().from(books).where(eq(books.id, id)).get();
   if (!book) {

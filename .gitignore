@@ -6,6 +6,9 @@
 
 # testing
 /coverage
+/playwright-report/
+/test-results/
+/.test/
 
 # next.js
 /.next/
@@ -41,3 +44,6 @@ next-env.d.ts
 #claude
 .claude/
 CLAUDE.md
+
+# local project context
+/CONTEXT.md

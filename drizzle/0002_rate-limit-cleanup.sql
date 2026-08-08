@@ -1,0 +1,1 @@
+CREATE INDEX `rate_limit_reset_at_idx` ON `rate_limit_buckets` (`reset_at`);

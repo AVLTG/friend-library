@@ -9,8 +9,11 @@ export async function GET() {
     return NextResponse.json({
       needsSetup: !userCount || userCount.count === 0,
     });
-  } catch {
-    // If DB isn't set up yet, needs setup
-    return NextResponse.json({ needsSetup: true });
+  } catch (error) {
+    console.error("Setup check error:", error);
+    return NextResponse.json(
+      { error: "Database is temporarily unavailable" },
+      { status: 503 },
+    );
   }
 }

@@ -4,6 +4,12 @@ import { books, userBooks, users } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { getSession, generateId, randomSpineColor } from "@/lib/auth";
 import { sanitizeText } from "@/lib/sanitize";
+import {
+  addBookSchema,
+  parseJsonBody,
+  RequestBodyError,
+  safeCoverUrl,
+} from "@/lib/validation";
 
 export async function GET() {
   const session = await getSession();
@@ -28,6 +34,7 @@ export async function GET() {
 
       return {
         ...book,
+        coverUrl: safeCoverUrl(book.coverUrl),
         authors: JSON.parse(book.authors),
         categories: book.categories ? JSON.parse(book.categories) : [],
         owners: bookUsers
@@ -96,18 +103,16 @@ export async function POST(request: Request) {
   }
 
   try {
-    const body = await request.json();
-    const title = body.title ? sanitizeText(body.title, 500) : "";
-    const authors: string[] = Array.isArray(body.authors)
-      ? body.authors.map((a: string) => sanitizeText(a, 200)).filter(Boolean)
-      : [];
+    const body = await parseJsonBody(request, addBookSchema, 16_384);
+    const title = sanitizeText(body.title, 500);
+    const authors = body.authors.map((author) => sanitizeText(author, 200)).filter(Boolean);
     const isbn = body.isbn ? sanitizeText(body.isbn, 20) : undefined;
     const description = body.description ? sanitizeText(body.description, 5000) : undefined;
-    const coverUrl = body.coverUrl ? sanitizeText(body.coverUrl, 1000) : undefined;
-    const pageCount = body.pageCount ? Math.max(0, Math.min(99999, Number(body.pageCount) || 0)) || undefined : undefined;
+    const coverUrl = safeCoverUrl(body.coverUrl) || undefined;
+    const pageCount = body.pageCount;
     const publishedDate = body.publishedDate ? sanitizeText(body.publishedDate, 20) : undefined;
-    const categories: string[] | undefined = Array.isArray(body.categories)
-      ? body.categories.map((c: string) => sanitizeText(c, 100)).filter(Boolean)
+    const categories = body.categories
+      ? body.categories.map((category) => sanitizeText(category, 100)).filter(Boolean)
       : undefined;
     const googleBooksId = body.googleBooksId ? sanitizeText(body.googleBooksId, 50) : undefined;
 
@@ -177,6 +182,9 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ bookId, alreadyExisted: false });
   } catch (error) {
+    if (error instanceof RequestBodyError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     console.error("Add book error:", error);
     return NextResponse.json(
       { error: "Failed to add book" },

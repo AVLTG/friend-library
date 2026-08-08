@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { books, userBooks, users } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { getSession } from "@/lib/auth";
+import { safeCoverUrl } from "@/lib/validation";
 
 export async function GET() {
   const session = await getSession();
@@ -28,7 +29,7 @@ export async function GET() {
         id: r.book.id,
         title: r.book.title,
         authors: JSON.parse(r.book.authors),
-        coverUrl: r.book.coverUrl,
+        coverUrl: safeCoverUrl(r.book.coverUrl),
         spineColor: r.book.spineColor,
         pageCount: r.book.pageCount,
       },

@@ -1,40 +1,66 @@
-import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
+import type { NextResponse } from "next/server";
 import { db } from "./db";
 import { users } from "./db/schema";
 import { eq } from "drizzle-orm";
+import {
+  createSessionToken,
+  SESSION_COOKIE_NAME,
+  SESSION_MAX_AGE,
+  type SessionPayload,
+  verifySessionToken,
+} from "./session-token";
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || "development-secret-change-in-production-please"
-);
-
-export interface SessionPayload {
-  userId: string;
-  username: string;
-  [key: string]: unknown;
-}
+export type { SessionPayload } from "./session-token";
 
 export async function createSession(payload: SessionPayload): Promise<string> {
-  const token = await new SignJWT({ ...payload })
-    .setProtectedHeader({ alg: "HS256" })
-    .setExpirationTime("30d")
-    .setIssuedAt()
-    .sign(JWT_SECRET);
-
-  return token;
+  return createSessionToken(payload);
 }
 
 export async function getSession(): Promise<SessionPayload | null> {
   const cookieStore = await cookies();
-  const token = cookieStore.get("session")?.value;
+  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
   if (!token) return null;
 
-  try {
-    const { payload } = await jwtVerify(token, JWT_SECRET);
-    return payload as unknown as SessionPayload;
-  } catch {
+  const session = await verifySessionToken(token);
+  if (!session) {
+    cookieStore.delete(SESSION_COOKIE_NAME);
     return null;
   }
+
+  const user = await db
+    .select({ sessionVersion: users.sessionVersion })
+    .from(users)
+    .where(eq(users.id, session.userId))
+    .get();
+
+  if (user?.sessionVersion !== session.sessionVersion) {
+    cookieStore.delete(SESSION_COOKIE_NAME);
+    return null;
+  }
+
+  return session;
+}
+
+export function setSessionCookie(response: NextResponse, token: string): void {
+  response.cookies.set(SESSION_COOKIE_NAME, token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    maxAge: SESSION_MAX_AGE,
+    path: "/",
+  });
+}
+
+export function clearSessionCookie(response: NextResponse): void {
+  response.cookies.set(SESSION_COOKIE_NAME, "", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    maxAge: 0,
+    expires: new Date(0),
+    path: "/",
+  });
 }
 
 export async function getCurrentUser() {

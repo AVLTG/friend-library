@@ -7,7 +7,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   BookOpen,
   ArrowLeft,
-  Users,
   Eye,
   PenLine,
   Star,
@@ -138,11 +137,15 @@ export default function BookDetailPage({
   async function submitReview() {
     setSaving(true);
     try {
-      await fetch(`/api/books/${id}`, {
+      const response = await fetch(`/api/books/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ rating: reviewRating, review: reviewText }),
       });
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.error || "Failed to submit review");
+      }
       setShowReviewForm(false);
       fetchBook();
     } catch (error) {
@@ -431,6 +434,7 @@ export default function BookDetailPage({
                     value={reviewText}
                     onChange={(e) => setReviewText(e.target.value)}
                     rows={4}
+                    maxLength={5000}
                     className="w-full px-4 py-3 bg-cream border border-warm-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-400 focus:border-transparent text-warm-900 placeholder-warm-400 resize-none text-sm"
                     placeholder="What did you think of this book?"
                   />

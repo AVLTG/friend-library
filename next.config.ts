@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { SECURITY_HEADERS } from "./src/lib/security-headers";
 
 const nextConfig: NextConfig = {
   images: {
@@ -8,14 +9,18 @@ const nextConfig: NextConfig = {
         hostname: "books.google.com",
       },
       {
-        protocol: "http",
-        hostname: "books.google.com",
-      },
-      {
         protocol: "https",
         hostname: "covers.openlibrary.org",
       },
     ],
+  },
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: SECURITY_HEADERS,
+      },
+    ];
   },
 };
 

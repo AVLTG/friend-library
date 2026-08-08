@@ -23,9 +23,14 @@ export function sanitizeReview(input: string): string {
 
 // Validate rating value
 export function validateRating(value: unknown): number | null {
-  if (value === null || value === undefined) return null;
-  const num = Number(value);
-  if (isNaN(num) || num < 0.5 || num > 5) return null;
-  // Snap to nearest 0.5
-  return Math.round(num * 2) / 2;
+  if (
+    typeof value !== "number" ||
+    !Number.isFinite(value) ||
+    value < 0.5 ||
+    value > 5 ||
+    !Number.isInteger(value * 2)
+  ) {
+    return null;
+  }
+  return value;
 }

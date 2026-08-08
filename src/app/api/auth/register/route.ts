@@ -5,33 +5,43 @@ import { users, inviteTokens } from "@/lib/db/schema";
 import { eq, and, isNull } from "drizzle-orm";
 import {
   createSession,
+  setSessionCookie,
   generateId,
   validatePassword,
   randomAvatarColor,
 } from "@/lib/auth";
 import { sanitizeName, sanitizeText } from "@/lib/sanitize";
 import { checkRateLimit, getClientIp, AUTH_LIMIT } from "@/lib/rate-limit";
+import {
+  parseJsonBody,
+  registrationSchema,
+  RequestBodyError,
+} from "@/lib/validation";
 
 export async function POST(request: Request) {
   const ip = getClientIp(request);
-  const { allowed, resetIn } = checkRateLimit(ip, AUTH_LIMIT);
-  if (!allowed) {
+  try {
+    const { allowed, resetIn } = await checkRateLimit(ip, AUTH_LIMIT);
+    if (!allowed) {
+      return NextResponse.json(
+        { error: `Too many attempts. Try again in ${Math.ceil(resetIn / 60000)} minutes.` },
+        {
+          status: 429,
+          headers: { "Retry-After": String(Math.ceil(resetIn / 1000)) },
+        },
+      );
+    }
+  } catch (error) {
+    console.error("Registration rate limit error:", error);
     return NextResponse.json(
-      { error: `Too many attempts. Try again in ${Math.ceil(resetIn / 60000)} minutes.` },
-      { status: 429 }
+      { error: "Registration is temporarily unavailable" },
+      { status: 503 },
     );
   }
 
   try {
     const { username, firstName, lastName, password, inviteToken } =
-      await request.json();
-
-    if (!username || !firstName || !lastName || !password || !inviteToken) {
-      return NextResponse.json(
-        { error: "All fields are required" },
-        { status: 400 }
-      );
-    }
+      await parseJsonBody(request, registrationSchema);
 
     const cleanUsername = sanitizeText(username, 20);
     const cleanFirstName = sanitizeName(firstName);
@@ -115,19 +125,17 @@ export async function POST(request: Request) {
     const sessionToken = await createSession({
       userId,
       username: cleanUsername.toLowerCase(),
+      sessionVersion: 0,
     });
 
     const response = NextResponse.json({ success: true });
-    response.cookies.set("session", sessionToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 30,
-      path: "/",
-    });
+    setSessionCookie(response, sessionToken);
 
     return response;
   } catch (error) {
+    if (error instanceof RequestBodyError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     console.error("Registration error:", error);
     return NextResponse.json(
       { error: "Something went wrong" },

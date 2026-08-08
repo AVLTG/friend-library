@@ -25,7 +25,7 @@ interface GoogleBooksVolume {
 }
 
 export async function searchBooks(query: string): Promise<GoogleBookResult[]> {
-  const apiKey = process.env.GOOGLE_BOOKS_API_KEY;
+  const apiKey = getGoogleBooksApiKey();
   const params = new URLSearchParams({
     q: query,
     maxResults: "20",
@@ -83,8 +83,9 @@ export async function searchBooks(query: string): Promise<GoogleBookResult[]> {
       authors: info.authors || ["Unknown Author"],
       description: info.description,
       isbn: isbnValue,
-      coverUrl,
-      pageCount: info.pageCount,
+      coverUrl: safeCoverUrl(coverUrl) || undefined,
+      pageCount:
+        info.pageCount && info.pageCount > 0 ? info.pageCount : undefined,
       publishedDate: info.publishedDate,
       categories: info.categories,
     };
@@ -94,7 +95,7 @@ export async function searchBooks(query: string): Promise<GoogleBookResult[]> {
 export async function getBookById(
   googleBooksId: string
 ): Promise<GoogleBookResult | null> {
-  const apiKey = process.env.GOOGLE_BOOKS_API_KEY;
+  const apiKey = getGoogleBooksApiKey();
   const params = new URLSearchParams();
   if (apiKey) params.set("key", apiKey);
 
@@ -129,9 +130,12 @@ export async function getBookById(
     authors: info.authors || ["Unknown Author"],
     description: info.description,
     isbn: isbnValue,
-    coverUrl,
-    pageCount: info.pageCount,
+    coverUrl: safeCoverUrl(coverUrl) || undefined,
+    pageCount:
+      info.pageCount && info.pageCount > 0 ? info.pageCount : undefined,
     publishedDate: info.publishedDate,
     categories: info.categories,
   };
 }
+import { getGoogleBooksApiKey } from "./env";
+import { safeCoverUrl } from "./validation";

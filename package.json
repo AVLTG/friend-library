@@ -2,43 +2,75 @@
   "name": "friend-library",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": "24.x",
+    "npm": "11.x"
+  },
+  "packageManager": "npm@11.13.0",
+  "overrides": {
+    "@esbuild-kit/core-utils": {
+      "esbuild": "0.25.12"
+    },
+    "postcss": "$postcss",
+    "sharp": "0.35.3"
+  },
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "typecheck": "tsc --noEmit --incremental false",
+    "test": "vitest run",
+    "test:migrations": "node scripts/test-migration-upgrade.mjs",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:server": "node scripts/reset-test-db.mjs && next dev --turbopack --hostname 127.0.0.1 --port 3100",
+    "check": "npm run lint && npm run typecheck && npm test && npm run test:migrations",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "drizzle-kit migrate",
+    "db:adopt-baseline": "node scripts/adopt-migration-baseline.mjs"
   },
   "dependencies": {
     "@libsql/client": "^0.14.0",
     "bcryptjs": "^2.4.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "drizzle-orm": "^0.38.0",
+    "drizzle-orm": "^0.45.2",
     "framer-motion": "^11.15.0",
     "jose": "^5.9.0",
     "lucide-react": "^0.468.0",
-    "next": "^15.1.0",
+    "next": "^15.5.23",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "tailwind-merge": "^2.6.0",
-    "tailwindcss-animate": "^1.0.7"
+    "tailwindcss-animate": "^1.0.7",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "^3.3.6",
+    "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "^4.0.0",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/jest-dom": "^7.0.0",
+    "@testing-library/react": "^16.3.2",
     "@types/bcryptjs": "^2.4.6",
-    "@types/node": "^22.0.0",
+    "@types/node": "^24.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^6.0.5",
     "dotenv": "^17.3.1",
-    "drizzle-kit": "^0.30.0",
+    "drizzle-kit": "^0.31.10",
     "eslint": "^9.0.0",
-    "eslint-config-next": "^15.1.0",
-    "postcss": "^8.5.0",
+    "eslint-config-next": "^15.5.23",
+    "jsdom": "^30.0.1",
+    "postcss": "8.5.26",
     "tailwindcss": "^4.0.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vite": "^8.2.1",
+    "vitest": "^4.1.10"
   }
 }

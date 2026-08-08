@@ -5,6 +5,7 @@ import { users, inviteTokens } from "@/lib/db/schema";
 import { count } from "drizzle-orm";
 import {
   createSession,
+  setSessionCookie,
   generateId,
   generateInviteToken,
   validatePassword,
@@ -12,13 +13,28 @@ import {
 } from "@/lib/auth";
 import { sanitizeName, sanitizeText } from "@/lib/sanitize";
 import { checkRateLimit, getClientIp, AUTH_LIMIT } from "@/lib/rate-limit";
+import { parseJsonBody, RequestBodyError, setupSchema } from "@/lib/validation";
 
 // First-time setup: creates the first admin user (no invite needed)
 export async function POST(request: Request) {
   const ip = getClientIp(request);
-  const { allowed } = checkRateLimit(ip, AUTH_LIMIT);
-  if (!allowed) {
-    return NextResponse.json({ error: "Too many attempts." }, { status: 429 });
+  try {
+    const { allowed, resetIn } = await checkRateLimit(ip, AUTH_LIMIT);
+    if (!allowed) {
+      return NextResponse.json(
+        { error: "Too many attempts." },
+        {
+          status: 429,
+          headers: { "Retry-After": String(Math.ceil(resetIn / 1000)) },
+        },
+      );
+    }
+  } catch (error) {
+    console.error("Setup rate limit error:", error);
+    return NextResponse.json(
+      { error: "Setup is temporarily unavailable" },
+      { status: 503 },
+    );
   }
 
   try {
@@ -31,16 +47,16 @@ export async function POST(request: Request) {
       );
     }
 
-    const body = await request.json();
-    const username = sanitizeText(body.username || "", 20);
-    const firstName = sanitizeName(body.firstName || "");
-    const lastName = sanitizeName(body.lastName || "");
+    const body = await parseJsonBody(request, setupSchema);
+    const username = sanitizeText(body.username, 20);
+    const firstName = sanitizeName(body.firstName);
+    const lastName = sanitizeName(body.lastName);
     const password = body.password;
 
-    if (!username || !firstName || !lastName || !password) {
+    if (!firstName || !lastName) {
       return NextResponse.json(
-        { error: "All fields are required" },
-        { status: 400 }
+        { error: "First and last name are required" },
+        { status: 400 },
       );
     }
 
@@ -80,6 +96,7 @@ export async function POST(request: Request) {
     const sessionToken = await createSession({
       userId,
       username: username.toLowerCase(),
+      sessionVersion: 0,
     });
 
     const response = NextResponse.json({
@@ -88,16 +105,13 @@ export async function POST(request: Request) {
       message: "Account created! Share the invite token with your friends.",
     });
 
-    response.cookies.set("session", sessionToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 30,
-      path: "/",
-    });
+    setSessionCookie(response, sessionToken);
 
     return response;
   } catch (error) {
+    if (error instanceof RequestBodyError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     console.error("Setup error:", error);
     return NextResponse.json(
       { error: "Something went wrong" },
