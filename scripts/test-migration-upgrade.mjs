@@ -77,9 +77,9 @@ async function verifyOrphanedUpgradeIsRejected() {
   }
 }
 
+await mkdir(dirname(databasePath), { recursive: true });
 await verifyOrphanedUpgradeIsRejected();
 
-await mkdir(dirname(databasePath), { recursive: true });
 await Promise.all([
   rm(databasePath, { force: true }),
   rm(`${databasePath}-shm`, { force: true }),
