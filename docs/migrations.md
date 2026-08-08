@@ -52,7 +52,7 @@ After migration, repeat the row-count and foreign-key checks, verify exactly one
 
 Migration `0004_api-correctness` must be applied before deploying code that writes `book_google_ids` or relies on canonical ISBN uniqueness.
 
-Because the pre-`0004` application does not maintain Google alias rows or canonicalize every ISBN write, use an enforced maintenance window rather than leaving the old application writable between migration and deployment. In the current Turso/Vercel setup, invalidate the old database tokens immediately before migration, install a newly generated token in Vercel production, apply and verify `0004` with that new token, then merge to trigger the deployment. The old deployment remains unable to access the database until the replacement deployment is live.
+Because the pre-`0004` application does not maintain Google alias rows or canonicalize every ISBN write, migration `0004` installs temporary `maintenance_0004_*` triggers that reject user-data writes while leaving reads available. The freeze marker is enabled only when upgrading an existing library, so fresh databases remain writable. Verify the enabled marker and all 11 triggers before merging. After the merged Vercel production deployment is live, drop those triggers and `__migration_0004_maintenance` in one reviewed SQL batch, then immediately run authenticated write smoke tests. Never remove them while the old application is still serving production.
 
 Before applying it:
 

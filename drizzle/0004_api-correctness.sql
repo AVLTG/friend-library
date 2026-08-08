@@ -108,4 +108,42 @@ DROP INDEX `books_google_books_id_idx`;--> statement-breakpoint
 DROP INDEX `books_isbn_idx`;--> statement-breakpoint
 CREATE UNIQUE INDEX `books_google_books_id_unique` ON `books` (`google_books_id`) WHERE "books"."google_books_id" IS NOT NULL;--> statement-breakpoint
 CREATE UNIQUE INDEX `books_isbn_unique` ON `books` (`isbn`) WHERE "books"."isbn" IS NOT NULL;--> statement-breakpoint
-DROP TABLE `__migration_0004_isbn_normalized`;
+DROP TABLE `__migration_0004_isbn_normalized`;--> statement-breakpoint
+CREATE TABLE `__migration_0004_maintenance` (
+	`enabled` integer NOT NULL CHECK (`enabled` = 1)
+);--> statement-breakpoint
+INSERT INTO `__migration_0004_maintenance` (`enabled`)
+SELECT 1 WHERE EXISTS (SELECT 1 FROM `books`);--> statement-breakpoint
+CREATE TRIGGER `maintenance_0004_books_insert` BEFORE INSERT ON `books`
+WHEN EXISTS (SELECT 1 FROM `__migration_0004_maintenance` WHERE `enabled` = 1)
+BEGIN SELECT RAISE(ABORT, 'BookShare maintenance'); END;--> statement-breakpoint
+CREATE TRIGGER `maintenance_0004_books_update` BEFORE UPDATE ON `books`
+WHEN EXISTS (SELECT 1 FROM `__migration_0004_maintenance` WHERE `enabled` = 1)
+BEGIN SELECT RAISE(ABORT, 'BookShare maintenance'); END;--> statement-breakpoint
+CREATE TRIGGER `maintenance_0004_books_delete` BEFORE DELETE ON `books`
+WHEN EXISTS (SELECT 1 FROM `__migration_0004_maintenance` WHERE `enabled` = 1)
+BEGIN SELECT RAISE(ABORT, 'BookShare maintenance'); END;--> statement-breakpoint
+CREATE TRIGGER `maintenance_0004_aliases_insert` BEFORE INSERT ON `book_google_ids`
+WHEN EXISTS (SELECT 1 FROM `__migration_0004_maintenance` WHERE `enabled` = 1)
+BEGIN SELECT RAISE(ABORT, 'BookShare maintenance'); END;--> statement-breakpoint
+CREATE TRIGGER `maintenance_0004_user_books_insert` BEFORE INSERT ON `user_books`
+WHEN EXISTS (SELECT 1 FROM `__migration_0004_maintenance` WHERE `enabled` = 1)
+BEGIN SELECT RAISE(ABORT, 'BookShare maintenance'); END;--> statement-breakpoint
+CREATE TRIGGER `maintenance_0004_user_books_update` BEFORE UPDATE ON `user_books`
+WHEN EXISTS (SELECT 1 FROM `__migration_0004_maintenance` WHERE `enabled` = 1)
+BEGIN SELECT RAISE(ABORT, 'BookShare maintenance'); END;--> statement-breakpoint
+CREATE TRIGGER `maintenance_0004_user_books_delete` BEFORE DELETE ON `user_books`
+WHEN EXISTS (SELECT 1 FROM `__migration_0004_maintenance` WHERE `enabled` = 1)
+BEGIN SELECT RAISE(ABORT, 'BookShare maintenance'); END;--> statement-breakpoint
+CREATE TRIGGER `maintenance_0004_users_insert` BEFORE INSERT ON `users`
+WHEN EXISTS (SELECT 1 FROM `__migration_0004_maintenance` WHERE `enabled` = 1)
+BEGIN SELECT RAISE(ABORT, 'BookShare maintenance'); END;--> statement-breakpoint
+CREATE TRIGGER `maintenance_0004_users_update` BEFORE UPDATE ON `users`
+WHEN EXISTS (SELECT 1 FROM `__migration_0004_maintenance` WHERE `enabled` = 1)
+BEGIN SELECT RAISE(ABORT, 'BookShare maintenance'); END;--> statement-breakpoint
+CREATE TRIGGER `maintenance_0004_invites_insert` BEFORE INSERT ON `invite_tokens`
+WHEN EXISTS (SELECT 1 FROM `__migration_0004_maintenance` WHERE `enabled` = 1)
+BEGIN SELECT RAISE(ABORT, 'BookShare maintenance'); END;--> statement-breakpoint
+CREATE TRIGGER `maintenance_0004_invites_update` BEFORE UPDATE ON `invite_tokens`
+WHEN EXISTS (SELECT 1 FROM `__migration_0004_maintenance` WHERE `enabled` = 1)
+BEGIN SELECT RAISE(ABORT, 'BookShare maintenance'); END;

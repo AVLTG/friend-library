@@ -386,6 +386,27 @@ try {
 
   await migrate(drizzle(client), { migrationsFolder });
 
+  const maintenanceTriggers = await client.execute(
+    `SELECT name FROM sqlite_master
+     WHERE type = 'trigger' AND name LIKE 'maintenance_0004_%'
+     ORDER BY name`,
+  );
+  if (maintenanceTriggers.rows.length !== 11) {
+    throw new Error("API correctness migration did not install the write freeze");
+  }
+  await expectConstraint(
+    `INSERT INTO books
+      (id, title, authors, spine_color, added_by, created_at)
+      VALUES ('Y12345678901234567890', 'Frozen Write', '["Author"]', '#123456', 'A12345678901234567890', 1)`,
+    "Migration write freeze",
+  );
+  await client.executeMultiple(
+    maintenanceTriggers.rows
+      .map((row) => `DROP TRIGGER ${String(row.name)}`)
+      .join(";"),
+  );
+  await client.execute("DROP TABLE __migration_0004_maintenance");
+
   const migratedUsers = await client.execute(
     "SELECT username, role, session_version FROM users ORDER BY created_at, id",
   );
