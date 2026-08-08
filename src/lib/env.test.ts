@@ -56,4 +56,13 @@ describe("environment validation", () => {
       ]),
     );
   });
+
+  it("uses the canonical BookShare origin in production by default", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("APP_ORIGIN", "");
+
+    expect(getAllowedOrigins()).toEqual(
+      new Set(["https://bookshare.avltg.dev"]),
+    );
+  });
 });

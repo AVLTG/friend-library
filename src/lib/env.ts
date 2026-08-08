@@ -74,7 +74,7 @@ export function getAllowedOrigins(): Set<string> {
   if (configuredOrigin) {
     origins.add(parseOrigin(configuredOrigin, "APP_ORIGIN"));
   } else if (process.env.NODE_ENV === "production") {
-    throw new Error("APP_ORIGIN is required in production");
+    origins.add("https://bookshare.avltg.dev");
   } else {
     origins.add("http://localhost:3000");
     origins.add("http://127.0.0.1:3000");
