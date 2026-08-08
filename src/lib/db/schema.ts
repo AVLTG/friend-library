@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, real, index } from "drizzle-orm/sqlite-core";
 
 export const users = sqliteTable("users", {
   id: text("id").primaryKey(), // nanoid
@@ -7,6 +7,7 @@ export const users = sqliteTable("users", {
   lastName: text("last_name").notNull(),
   passwordHash: text("password_hash").notNull(),
   avatarColor: text("avatar_color").notNull(), // hex color for avatar
+  sessionVersion: integer("session_version").notNull().default(0),
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
     .$defaultFn(() => new Date()),
@@ -67,6 +68,16 @@ export const userBooks = sqliteTable("user_books", {
     .notNull()
     .$defaultFn(() => new Date()),
 });
+
+export const rateLimitBuckets = sqliteTable(
+  "rate_limit_buckets",
+  {
+    id: text("id").primaryKey(),
+    count: integer("count").notNull(),
+    resetAt: integer("reset_at").notNull(),
+  },
+  (table) => [index("rate_limit_reset_at_idx").on(table.resetAt)],
+);
 
 // Type exports
 export type User = typeof users.$inferSelect;

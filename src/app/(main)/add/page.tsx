@@ -92,6 +92,7 @@ export default function AddBookPage() {
   const [selectedBook, setSelectedBook] = useState<SearchResult | null>(null);
   const [editMode, setEditMode] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [showManual, setShowManual] = useState(false);
   const [existingBooks, setExistingBooks] = useState<ExistingBook[]>([]);
   const searchTimeout = useRef<ReturnType<typeof setTimeout>>(null);
@@ -167,6 +168,7 @@ export default function AddBookPage() {
   }
 
   function selectBook(book: SearchResult) {
+    setSaveError("");
     setSelectedBook(book);
     setEditTitle(book.title);
     setEditAuthors(book.authors.join(", "));
@@ -178,6 +180,7 @@ export default function AddBookPage() {
   }
 
   function startManualEntry() {
+    setSaveError("");
     setShowManual(true);
     setSelectedBook(null);
     setEditTitle("");
@@ -191,6 +194,7 @@ export default function AddBookPage() {
 
   async function handleAddBook() {
     setSaving(true);
+    setSaveError("");
     try {
       const bookData = {
         title: editMode ? editTitle : selectedBook?.title,
@@ -220,12 +224,15 @@ export default function AddBookPage() {
         body: JSON.stringify(bookData),
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        router.push(`/book/${data.bookId}`);
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setSaveError(data?.error || "Failed to add book");
+        return;
       }
+      router.push(`/book/${data.bookId}`);
     } catch (error) {
       console.error("Failed to add book:", error);
+      setSaveError("Failed to add book");
     } finally {
       setSaving(false);
     }
@@ -304,29 +311,29 @@ export default function AddBookPage() {
                     <>
                       <div>
                         <label className="block text-xs font-medium text-warm-600 mb-1">Title *</label>
-                        <input type="text" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} className="w-full px-3 py-2 bg-cream border border-warm-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-warm-400" />
+                        <input type="text" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} maxLength={500} className="w-full px-3 py-2 bg-cream border border-warm-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-warm-400" />
                       </div>
                       <div>
                         <label className="block text-xs font-medium text-warm-600 mb-1">Authors * (comma separated)</label>
-                        <input type="text" value={editAuthors} onChange={(e) => setEditAuthors(e.target.value)} className="w-full px-3 py-2 bg-cream border border-warm-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-warm-400" />
+                        <input type="text" value={editAuthors} onChange={(e) => setEditAuthors(e.target.value)} maxLength={4000} className="w-full px-3 py-2 bg-cream border border-warm-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-warm-400" />
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <label className="block text-xs font-medium text-warm-600 mb-1">ISBN</label>
-                          <input type="text" value={editIsbn} onChange={(e) => setEditIsbn(e.target.value)} className="w-full px-3 py-2 bg-cream border border-warm-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-warm-400" />
+                          <input type="text" value={editIsbn} onChange={(e) => setEditIsbn(e.target.value)} maxLength={20} className="w-full px-3 py-2 bg-cream border border-warm-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-warm-400" />
                         </div>
                         <div>
                           <label className="block text-xs font-medium text-warm-600 mb-1">Page Count</label>
-                          <input type="number" value={editPageCount} onChange={(e) => setEditPageCount(e.target.value)} className="w-full px-3 py-2 bg-cream border border-warm-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-warm-400" />
+                          <input type="number" value={editPageCount} onChange={(e) => setEditPageCount(e.target.value)} min={1} max={99999} className="w-full px-3 py-2 bg-cream border border-warm-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-warm-400" />
                         </div>
                       </div>
                       <div>
                         <label className="block text-xs font-medium text-warm-600 mb-1">Published Date</label>
-                        <input type="text" value={editPublishedDate} onChange={(e) => setEditPublishedDate(e.target.value)} placeholder="e.g. 2024" className="w-full px-3 py-2 bg-cream border border-warm-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-warm-400" />
+                        <input type="text" value={editPublishedDate} onChange={(e) => setEditPublishedDate(e.target.value)} maxLength={20} placeholder="e.g. 2024" className="w-full px-3 py-2 bg-cream border border-warm-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-warm-400" />
                       </div>
                       <div>
                         <label className="block text-xs font-medium text-warm-600 mb-1">Description</label>
-                        <textarea value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={3} className="w-full px-3 py-2 bg-cream border border-warm-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-warm-400 resize-none" />
+                        <textarea value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={3} maxLength={5000} className="w-full px-3 py-2 bg-cream border border-warm-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-warm-400 resize-none" />
                       </div>
                     </>
                   ) : (
@@ -340,6 +347,12 @@ export default function AddBookPage() {
                   )}
                 </div>
               </div>
+
+              {saveError && (
+                <p className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                  {saveError}
+                </p>
+              )}
 
               <button
                 onClick={handleAddBook}

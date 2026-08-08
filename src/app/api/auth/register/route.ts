@@ -2,36 +2,49 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { users, inviteTokens } from "@/lib/db/schema";
-import { eq, and, isNull } from "drizzle-orm";
+import { eq, and, gt, isNull } from "drizzle-orm";
 import {
   createSession,
+  setSessionCookie,
   generateId,
   validatePassword,
   randomAvatarColor,
 } from "@/lib/auth";
 import { sanitizeName, sanitizeText } from "@/lib/sanitize";
 import { checkRateLimit, getClientIp, AUTH_LIMIT } from "@/lib/rate-limit";
+import {
+  parseJsonBody,
+  registrationSchema,
+  RequestBodyError,
+} from "@/lib/validation";
+import { withSqliteBusyRetry } from "@/lib/db/transaction";
+
+class InviteUnavailableError extends Error {}
 
 export async function POST(request: Request) {
   const ip = getClientIp(request);
-  const { allowed, resetIn } = checkRateLimit(ip, AUTH_LIMIT);
-  if (!allowed) {
+  try {
+    const { allowed, resetIn } = await checkRateLimit(ip, AUTH_LIMIT);
+    if (!allowed) {
+      return NextResponse.json(
+        { error: `Too many attempts. Try again in ${Math.ceil(resetIn / 60000)} minutes.` },
+        {
+          status: 429,
+          headers: { "Retry-After": String(Math.ceil(resetIn / 1000)) },
+        },
+      );
+    }
+  } catch (error) {
+    console.error("Registration rate limit error:", error);
     return NextResponse.json(
-      { error: `Too many attempts. Try again in ${Math.ceil(resetIn / 60000)} minutes.` },
-      { status: 429 }
+      { error: "Registration is temporarily unavailable" },
+      { status: 503 },
     );
   }
 
   try {
     const { username, firstName, lastName, password, inviteToken } =
-      await request.json();
-
-    if (!username || !firstName || !lastName || !password || !inviteToken) {
-      return NextResponse.json(
-        { error: "All fields are required" },
-        { status: 400 }
-      );
-    }
+      await parseJsonBody(request, registrationSchema);
 
     const cleanUsername = sanitizeText(username, 20);
     const cleanFirstName = sanitizeName(firstName);
@@ -98,36 +111,56 @@ export async function POST(request: Request) {
     const userId = generateId();
     const passwordHash = await bcrypt.hash(password, 12);
 
-    await db.insert(users).values({
-      id: userId,
-      username: cleanUsername.toLowerCase(),
-      firstName: cleanFirstName,
-      lastName: cleanLastName,
-      passwordHash,
-      avatarColor: randomAvatarColor(),
-    });
+    await withSqliteBusyRetry(() =>
+      db.transaction(async (tx) => {
+        await tx.insert(users).values({
+          id: userId,
+          username: cleanUsername.toLowerCase(),
+          firstName: cleanFirstName,
+          lastName: cleanLastName,
+          passwordHash,
+          avatarColor: randomAvatarColor(),
+        });
 
-    await db
-      .update(inviteTokens)
-      .set({ usedBy: userId, usedAt: new Date() })
-      .where(eq(inviteTokens.id, token.id));
+        const claimedToken = await tx
+          .update(inviteTokens)
+          .set({ usedBy: userId, usedAt: new Date() })
+          .where(
+            and(
+              eq(inviteTokens.id, token.id),
+              isNull(inviteTokens.usedBy),
+              gt(inviteTokens.expiresAt, new Date()),
+            ),
+          )
+          .returning({ id: inviteTokens.id })
+          .get();
+
+        if (!claimedToken) {
+          throw new InviteUnavailableError();
+        }
+      }),
+    );
 
     const sessionToken = await createSession({
       userId,
       username: cleanUsername.toLowerCase(),
+      sessionVersion: 0,
     });
 
     const response = NextResponse.json({ success: true });
-    response.cookies.set("session", sessionToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 30,
-      path: "/",
-    });
+    setSessionCookie(response, sessionToken);
 
     return response;
   } catch (error) {
+    if (error instanceof RequestBodyError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    if (error instanceof InviteUnavailableError) {
+      return NextResponse.json(
+        { error: "Invalid, expired, or already used invite token" },
+        { status: 400 },
+      );
+    }
     console.error("Registration error:", error);
     return NextResponse.json(
       { error: "Something went wrong" },

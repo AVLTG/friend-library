@@ -1,106 +1,96 @@
-// Simple in-memory rate limiter for serverless functions.
-// Tracks request counts per IP within sliding windows.
-// Resets on cold starts, but effective against burst attacks.
-
-interface RateLimitEntry {
-  count: number;
-  resetAt: number;
-}
-
-const stores = new Map<string, Map<string, RateLimitEntry>>();
-
-function getStore(name: string): Map<string, RateLimitEntry> {
-  if (!stores.has(name)) {
-    stores.set(name, new Map());
-  }
-  return stores.get(name)!;
-}
+import { createHash } from "node:crypto";
+import { isIP } from "node:net";
+import { lt, sql } from "drizzle-orm";
+import { db } from "./db";
+import { rateLimitBuckets } from "./db/schema";
 
 interface RateLimitConfig {
-  name: string; // Unique name for this limiter
-  maxRequests: number; // Max requests in the window
-  windowMs: number; // Window duration in milliseconds
+  name: string;
+  maxRequests: number;
+  windowMs: number;
 }
 
 interface RateLimitResult {
   allowed: boolean;
   remaining: number;
-  resetIn: number; // ms until reset
+  resetIn: number;
 }
 
-export function checkRateLimit(
+export async function checkRateLimit(
   key: string,
-  config: RateLimitConfig
-): RateLimitResult {
-  const store = getStore(config.name);
+  config: RateLimitConfig,
+): Promise<RateLimitResult> {
   const now = Date.now();
+  const resetAt = now + config.windowMs;
+  const keyHash = createHash("sha256").update(key).digest("hex");
+  const id = `${config.name}:${keyHash}`;
 
-  // Clean expired entries periodically (every 100 checks)
+  const bucket = await db
+    .insert(rateLimitBuckets)
+    .values({ id, count: 1, resetAt })
+    .onConflictDoUpdate({
+      target: rateLimitBuckets.id,
+      set: {
+        count: sql`CASE WHEN ${rateLimitBuckets.resetAt} <= ${now} THEN 1 ELSE MIN(${rateLimitBuckets.count} + 1, ${config.maxRequests + 1}) END`,
+        resetAt: sql`CASE WHEN ${rateLimitBuckets.resetAt} <= ${now} THEN ${resetAt} ELSE ${rateLimitBuckets.resetAt} END`,
+      },
+    })
+    .returning({
+      count: rateLimitBuckets.count,
+      resetAt: rateLimitBuckets.resetAt,
+    })
+    .get();
+
+  const allowed = bucket.count <= config.maxRequests;
+
   if (Math.random() < 0.01) {
-    for (const [k, v] of store) {
-      if (v.resetAt < now) store.delete(k);
+    try {
+      await db
+        .delete(rateLimitBuckets)
+        .where(lt(rateLimitBuckets.resetAt, now - 24 * 60 * 60 * 1000));
+    } catch (error) {
+      console.error("Rate-limit cleanup error:", error);
     }
   }
 
-  const entry = store.get(key);
-
-  if (!entry || entry.resetAt < now) {
-    // New window
-    store.set(key, { count: 1, resetAt: now + config.windowMs });
-    return {
-      allowed: true,
-      remaining: config.maxRequests - 1,
-      resetIn: config.windowMs,
-    };
-  }
-
-  if (entry.count >= config.maxRequests) {
-    return {
-      allowed: false,
-      remaining: 0,
-      resetIn: entry.resetAt - now,
-    };
-  }
-
-  entry.count++;
   return {
-    allowed: true,
-    remaining: config.maxRequests - entry.count,
-    resetIn: entry.resetAt - now,
+    allowed,
+    remaining: Math.max(0, config.maxRequests - bucket.count),
+    resetIn: Math.max(0, bucket.resetAt - now),
   };
 }
 
-// Extract IP from request, falling back gracefully
 export function getClientIp(request: Request): string {
-  const headers = new Headers(request.headers);
-  return (
-    headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    headers.get("x-real-ip") ||
-    "unknown"
-  );
+  if (process.env.VERCEL !== "1") return "unknown";
+
+  const forwarded = request.headers
+    .get("x-vercel-forwarded-for")
+    ?.split(",", 1)[0]
+    ?.trim();
+
+  return forwarded && isIP(forwarded) ? forwarded : "unknown";
 }
 
-// Pre-configured limiters
 export const AUTH_LIMIT = {
   name: "auth",
   maxRequests: 10,
-  windowMs: 15 * 60 * 1000, // 10 attempts per 15 minutes
+  windowMs: 15 * 60 * 1000,
+};
+
+export const PASSWORD_LIMIT = {
+  name: "password",
+  maxRequests: 5,
+  windowMs: 15 * 60 * 1000,
 };
 
 export const SEARCH_LIMIT = {
   name: "search",
   maxRequests: 30,
-  windowMs: 60 * 1000, // 30 searches per minute
+  windowMs: 60 * 1000,
 };
 
 export const INVITE_LIMIT = {
   name: "invite",
   maxRequests: 5,
-  windowMs: 60 * 60 * 1000, // 5 invites per hour
-};
-
-export const GENERAL_API_LIMIT = {
-  name: "general",
-  maxRequests: 100,
-  windowMs: 60 * 1000, // 100 requests per minute
+  windowMs: 60 * 60 * 1000,
 };

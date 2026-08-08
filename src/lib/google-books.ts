@@ -1,3 +1,22 @@
+import { getGoogleBooksApiKey } from "./env";
+import { safeCoverUrl } from "./validation";
+
+function truncate(value: string | undefined, maxLength: number) {
+  return value?.slice(0, maxLength);
+}
+
+function normalizeAuthors(authors: string[] | undefined): string[] {
+  return (authors?.length ? authors : ["Unknown Author"])
+    .slice(0, 20)
+    .map((author) => author.slice(0, 200));
+}
+
+function normalizeCategories(categories: string[] | undefined) {
+  return categories
+    ?.slice(0, 50)
+    .map((category) => category.slice(0, 100));
+}
+
 export interface GoogleBookResult {
   id: string;
   title: string;
@@ -25,7 +44,7 @@ interface GoogleBooksVolume {
 }
 
 export async function searchBooks(query: string): Promise<GoogleBookResult[]> {
-  const apiKey = process.env.GOOGLE_BOOKS_API_KEY;
+  const apiKey = getGoogleBooksApiKey();
   const params = new URLSearchParams({
     q: query,
     maxResults: "20",
@@ -79,14 +98,17 @@ export async function searchBooks(query: string): Promise<GoogleBookResult[]> {
 
     return {
       id: item.id,
-      title: info.title,
-      authors: info.authors || ["Unknown Author"],
-      description: info.description,
-      isbn: isbnValue,
-      coverUrl,
-      pageCount: info.pageCount,
-      publishedDate: info.publishedDate,
-      categories: info.categories,
+      title: info.title.slice(0, 500),
+      authors: normalizeAuthors(info.authors),
+      description: truncate(info.description, 5000),
+      isbn: truncate(isbnValue, 20),
+      coverUrl: safeCoverUrl(coverUrl) || undefined,
+      pageCount:
+        info.pageCount && info.pageCount > 0 && info.pageCount <= 99999
+          ? info.pageCount
+          : undefined,
+      publishedDate: truncate(info.publishedDate, 20),
+      categories: normalizeCategories(info.categories),
     };
   });
 }
@@ -94,7 +116,7 @@ export async function searchBooks(query: string): Promise<GoogleBookResult[]> {
 export async function getBookById(
   googleBooksId: string
 ): Promise<GoogleBookResult | null> {
-  const apiKey = process.env.GOOGLE_BOOKS_API_KEY;
+  const apiKey = getGoogleBooksApiKey();
   const params = new URLSearchParams();
   if (apiKey) params.set("key", apiKey);
 
@@ -125,13 +147,16 @@ export async function getBookById(
 
   return {
     id: item.id,
-    title: info.title,
-    authors: info.authors || ["Unknown Author"],
-    description: info.description,
-    isbn: isbnValue,
-    coverUrl,
-    pageCount: info.pageCount,
-    publishedDate: info.publishedDate,
-    categories: info.categories,
+    title: info.title.slice(0, 500),
+    authors: normalizeAuthors(info.authors),
+    description: truncate(info.description, 5000),
+    isbn: truncate(isbnValue, 20),
+    coverUrl: safeCoverUrl(coverUrl) || undefined,
+    pageCount:
+      info.pageCount && info.pageCount > 0 && info.pageCount <= 99999
+        ? info.pageCount
+        : undefined,
+    publishedDate: truncate(info.publishedDate, 20),
+    categories: normalizeCategories(info.categories),
   };
 }

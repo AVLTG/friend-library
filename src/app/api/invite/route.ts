@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { inviteTokens } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { getSession, generateId, generateInviteToken } from "@/lib/auth";
-import { checkRateLimit, getClientIp, INVITE_LIMIT } from "@/lib/rate-limit";
+import { checkRateLimit, INVITE_LIMIT } from "@/lib/rate-limit";
 
 export async function GET() {
   const session = await getSession();
@@ -20,18 +20,31 @@ export async function GET() {
   return NextResponse.json(tokens);
 }
 
-export async function POST(request: Request) {
+export async function POST() {
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const ip = getClientIp(request);
-  const { allowed } = checkRateLimit(ip, INVITE_LIMIT);
-  if (!allowed) {
+  try {
+    const { allowed, resetIn } = await checkRateLimit(
+      session.userId,
+      INVITE_LIMIT,
+    );
+    if (!allowed) {
+      return NextResponse.json(
+        { error: "Too many invites generated. Try again later." },
+        {
+          status: 429,
+          headers: { "Retry-After": String(Math.ceil(resetIn / 1000)) },
+        },
+      );
+    }
+  } catch (error) {
+    console.error("Invite rate limit error:", error);
     return NextResponse.json(
-      { error: "Too many invites generated. Try again later." },
-      { status: 429 }
+      { error: "Invite generation is temporarily unavailable" },
+      { status: 503 },
     );
   }
 

@@ -44,6 +44,8 @@ export default function SettingsPage() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [username, setUsername] = useState("");
+  const [usernamePassword, setUsernamePassword] = useState("");
+  const [showUsernamePassword, setShowUsernamePassword] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -124,7 +126,14 @@ export default function SettingsPage() {
       const res = await fetch("/api/auth/account", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ firstName, lastName, username }),
+        body: JSON.stringify({
+          firstName,
+          lastName,
+          username,
+          ...(username !== profile?.username
+            ? { currentPassword: usernamePassword }
+            : {}),
+        }),
       });
 
       const data = await res.json();
@@ -134,6 +143,7 @@ export default function SettingsPage() {
       }
 
       setProfileMessage({ type: "success", text: "Profile updated" });
+      setUsernamePassword("");
       fetchProfile();
     } catch {
       setProfileMessage({ type: "error", text: "Something went wrong" });
@@ -182,6 +192,7 @@ export default function SettingsPage() {
     (firstName !== profile.firstName ||
       lastName !== profile.lastName ||
       username !== profile.username);
+  const usernameChanged = profile && username !== profile.username;
 
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8">
@@ -252,6 +263,39 @@ export default function SettingsPage() {
                 required
               />
             </div>
+
+            {usernameChanged && (
+              <div>
+                <label className="block text-sm font-medium text-warm-700 mb-1.5">
+                  Current Password
+                </label>
+                <div className="relative">
+                  <input
+                    type={showUsernamePassword ? "text" : "password"}
+                    value={usernamePassword}
+                    onChange={(e) => setUsernamePassword(e.target.value)}
+                    className="w-full px-4 py-2.5 pr-11 bg-cream border border-warm-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-400 focus:border-transparent text-warm-900 text-sm"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setShowUsernamePassword(!showUsernamePassword)
+                    }
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-warm-400 hover:text-warm-600"
+                  >
+                    {showUsernamePassword ? (
+                      <EyeOff className="w-4 h-4" />
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
+                  </button>
+                </div>
+                <p className="text-warm-400 text-xs mt-1">
+                  Required because your username is used to sign in.
+                </p>
+              </div>
+            )}
 
             {profileMessage && (
               <motion.div
