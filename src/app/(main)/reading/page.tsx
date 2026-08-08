@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import Image from "next/image";
+import Link from "next/link";
 import { motion } from "framer-motion";
 import { BookOpen, BookMarked } from "lucide-react";
 import { apiErrorMessage, apiFetch } from "@/lib/api-client";
@@ -14,7 +14,6 @@ type ReadingRequest =
   | { status: "error"; message: string };
 
 export default function ReadingPage() {
-  const router = useRouter();
   const [request, setRequest] = useState<ReadingRequest>({ status: "loading" });
   const requestController = useRef<AbortController | null>(null);
 
@@ -71,13 +70,14 @@ export default function ReadingPage() {
   if (request.status === "loading") {
     return (
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-12">
-        <div className="flex items-center justify-center h-[300px]">
+        <div role="status" className="flex items-center justify-center gap-3 h-[300px] text-warm-700">
           <motion.div
             animate={{ rotate: 360 }}
             transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
           >
             <BookOpen className="w-8 h-8 text-warm-500" />
           </motion.div>
+          <span className="text-sm">Loading current reading activity...</span>
         </div>
       </div>
     );
@@ -90,7 +90,7 @@ export default function ReadingPage() {
           <h1 className="font-serif text-xl font-bold text-warm-900 mb-2">
             Couldn&apos;t load current reading activity
           </h1>
-          <p className="text-warm-500 text-sm mb-5">{request.message}</p>
+          <p className="text-warm-600 text-sm mb-5">{request.message}</p>
           <button
             onClick={() => void fetchReading()}
             className="bg-warm-700 text-cream px-4 py-2 rounded-lg font-medium hover:bg-warm-800 transition-colors text-sm"
@@ -108,7 +108,7 @@ export default function ReadingPage() {
         <h1 className="font-serif text-3xl font-bold text-warm-900 mb-1">
           Currently Reading
         </h1>
-        <p className="text-warm-500 text-sm">
+        <p className="text-warm-600 text-sm">
           See what everyone in the group is reading right now
         </p>
       </div>
@@ -118,10 +118,10 @@ export default function ReadingPage() {
           <div className="w-16 h-16 bg-warm-200 rounded-full flex items-center justify-center mx-auto mb-4">
             <BookMarked className="w-8 h-8 text-warm-400" />
           </div>
-          <p className="font-serif text-lg text-warm-500">
+          <p className="font-serif text-lg text-warm-600">
             Nobody is reading anything right now
           </p>
-          <p className="text-warm-400 text-sm mt-1">
+          <p className="text-warm-600 text-sm mt-1">
             Mark a book as &quot;Currently reading&quot; to show up here
           </p>
         </div>
@@ -133,7 +133,7 @@ export default function ReadingPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.1 }}
-              className="card-warm p-6"
+              className="card-warm p-4 sm:p-6"
             >
               {/* User header */}
               <div className="flex items-center gap-3 mb-5">
@@ -148,7 +148,7 @@ export default function ReadingPage() {
                   <h2 className="font-serif font-bold text-warm-900">
                     {user.firstName} {user.lastName}
                   </h2>
-                  <p className="text-warm-500 text-xs">
+                  <p className="text-warm-700 text-xs">
                     Reading {books.length} {books.length === 1 ? "book" : "books"}
                   </p>
                 </div>
@@ -157,16 +157,16 @@ export default function ReadingPage() {
               {/* Books */}
               <div className="flex flex-wrap gap-4">
                 {books.map((book) => (
-                  <button
+                  <Link
                     key={book.id}
-                    onClick={() => router.push(`/book/${book.id}`)}
+                    href={`/book/${book.id}`}
                     className="flex gap-3 p-3 bg-cream rounded-lg hover:bg-warm-100 transition-colors text-left w-full sm:w-auto sm:min-w-[280px]"
                   >
                     {book.coverUrl ? (
                       <div className="relative w-[50px] h-[75px] rounded overflow-hidden flex-shrink-0 shadow-sm">
                         <Image
                           src={book.coverUrl}
-                          alt={book.title}
+                          alt=""
                           fill
                           className="object-cover"
                           sizes="50px"
@@ -184,16 +184,16 @@ export default function ReadingPage() {
                       <h3 className="font-serif font-bold text-warm-900 text-sm leading-tight">
                         {book.title}
                       </h3>
-                      <p className="text-warm-500 text-xs mt-0.5">
+                      <p className="text-warm-700 text-xs mt-0.5 break-words">
                         {book.authors.join(", ")}
                       </p>
                       {book.pageCount && (
-                        <p className="text-warm-400 text-xs mt-1">
+                        <p className="text-warm-600 text-xs mt-1">
                           {book.pageCount} pages
                         </p>
                       )}
                     </div>
-                  </button>
+                  </Link>
                 ))}
               </div>
             </motion.div>

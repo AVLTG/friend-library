@@ -7,7 +7,7 @@ export default function NotFound() {
         <h1 className="font-serif text-xl font-bold text-warm-900 mb-2">
           Page not found
         </h1>
-        <p className="text-warm-500 text-sm mb-5">
+        <p className="text-warm-600 text-sm mb-5">
           That shelf or book does not exist anymore.
         </p>
         <Link

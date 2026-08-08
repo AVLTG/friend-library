@@ -19,6 +19,7 @@ type TabKey = "owned" | "currentlyReading" | "read" | "annotated";
 export default function ProfilePage() {
   const [request, setRequest] = useState<BooksRequest>({ status: "loading" });
   const requestController = useRef<AbortController | null>(null);
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const [activeTab, setActiveTab] = useState<TabKey>("owned");
 
   const fetchBooks = useCallback(async () => {
@@ -113,16 +114,33 @@ export default function ProfilePage() {
     },
   ];
 
+  function handleTabKeyDown(
+    event: React.KeyboardEvent<HTMLButtonElement>,
+    index: number,
+  ) {
+    let nextIndex: number | null = null;
+    if (event.key === "ArrowRight") nextIndex = (index + 1) % tabs.length;
+    if (event.key === "ArrowLeft") nextIndex = (index - 1 + tabs.length) % tabs.length;
+    if (event.key === "Home") nextIndex = 0;
+    if (event.key === "End") nextIndex = tabs.length - 1;
+    if (nextIndex === null) return;
+
+    event.preventDefault();
+    setActiveTab(tabs[nextIndex].key);
+    tabRefs.current[nextIndex]?.focus();
+  }
+
   if (request.status === "loading") {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-12">
-        <div className="flex items-center justify-center h-[400px]">
+        <div role="status" className="flex items-center justify-center gap-3 h-[400px] text-warm-700">
           <motion.div
             animate={{ rotate: 360 }}
             transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
           >
             <BookOpen className="w-8 h-8 text-warm-500" />
           </motion.div>
+          <span className="text-sm">Loading your library...</span>
         </div>
       </div>
     );
@@ -135,7 +153,7 @@ export default function ProfilePage() {
           <h1 className="font-serif text-xl font-bold text-warm-900 mb-2">
             Couldn&apos;t load your library
           </h1>
-          <p className="text-warm-500 text-sm mb-5">{request.message}</p>
+          <p className="text-warm-600 text-sm mb-5">{request.message}</p>
           <button
             onClick={() => void fetchBooks()}
             className="bg-warm-700 text-cream px-4 py-2 rounded-lg font-medium hover:bg-warm-800 transition-colors text-sm"
@@ -153,31 +171,31 @@ export default function ProfilePage() {
         <h1 className="font-serif text-3xl font-bold text-warm-900 mb-1">
           My Library
         </h1>
-        <p className="text-warm-500 text-sm">
+        <p className="text-warm-600 text-sm">
           Your personal collection and reading history
         </p>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4 mb-8">
         {[
           {
             label: "Books Owned",
             value: stats.owned,
             icon: BookOpen,
-            color: "bg-warm-600",
+            color: "bg-warm-700",
           },
           {
             label: "Books Read",
             value: stats.read,
             icon: Eye,
-            color: "bg-warm-500",
+            color: "bg-warm-700",
           },
           {
             label: "Annotated",
             value: stats.annotated,
             icon: PenLine,
-            color: "bg-warm-400",
+            color: "bg-warm-700",
           },
           {
             label: "Reviewed",
@@ -191,9 +209,9 @@ export default function ProfilePage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.1 }}
-            className="card-warm p-4"
+            className="card-warm p-3 sm:p-4"
           >
-            <div className="flex items-center gap-3">
+            <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
               <div
                 className={`w-10 h-10 ${stat.color} rounded-lg flex items-center justify-center`}
               >
@@ -203,7 +221,7 @@ export default function ProfilePage() {
                 <p className="font-serif text-2xl font-bold text-warm-900">
                   {stat.value}
                 </p>
-                <p className="text-warm-500 text-xs">{stat.label}</p>
+                <p className="text-warm-700 text-xs">{stat.label}</p>
               </div>
             </div>
           </motion.div>
@@ -211,15 +229,27 @@ export default function ProfilePage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 mb-8 border-b border-warm-200">
-        {tabs.map((tab) => (
+      <div
+        role="tablist"
+        aria-label="Personal library sections"
+        className="mb-8 grid grid-cols-2 gap-1 border-b border-warm-300 sm:flex sm:gap-2"
+      >
+        {tabs.map((tab, index) => (
           <button
             key={tab.key}
+            ref={(element) => { tabRefs.current[index] = element; }}
+            type="button"
+            id={`profile-tab-${tab.key}`}
+            role="tab"
+            aria-selected={activeTab === tab.key}
+            aria-controls="profile-tab-panel"
+            tabIndex={activeTab === tab.key ? 0 : -1}
             onClick={() => setActiveTab(tab.key)}
-            className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors -mb-[1px] ${
+            onKeyDown={(event) => handleTabKeyDown(event, index)}
+            className={`-mb-px flex min-w-0 items-center justify-center gap-2 border-b-2 px-2 py-3 text-sm font-medium transition-colors sm:px-4 ${
               activeTab === tab.key
                 ? "border-warm-700 text-warm-900"
-                : "border-transparent text-warm-400 hover:text-warm-600"
+                : "border-transparent text-warm-600 hover:text-warm-800"
             }`}
           >
             <tab.icon className="w-4 h-4" />
@@ -228,7 +258,7 @@ export default function ProfilePage() {
               className={`text-xs px-1.5 py-0.5 rounded-full ${
                 activeTab === tab.key
                   ? "bg-warm-700 text-cream"
-                  : "bg-warm-200 text-warm-500"
+                  : "bg-warm-200 text-warm-700"
               }`}
             >
               {tab.count}
@@ -238,15 +268,22 @@ export default function ProfilePage() {
       </div>
 
       {/* Book display */}
-      {myBooks.length > 0 ? (
-        <Bookshelf books={myBooks} />
-      ) : (
-        <div className="text-center py-16">
-          <p className="font-serif text-lg text-warm-400 italic">
-            No books here yet
-          </p>
-        </div>
-      )}
+      <section
+        id="profile-tab-panel"
+        role="tabpanel"
+        aria-labelledby={`profile-tab-${activeTab}`}
+        tabIndex={0}
+      >
+        {myBooks.length > 0 ? (
+          <Bookshelf books={myBooks} />
+        ) : (
+          <div className="text-center py-16">
+            <p className="font-serif text-lg text-warm-600 italic">
+              No books here yet
+            </p>
+          </div>
+        )}
+      </section>
     </div>
   );
 }

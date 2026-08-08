@@ -41,6 +41,13 @@ export default function BookDetailPage({
   const requestSequenceRef = useRef(0);
   const activeRequestRef = useRef<AbortController | null>(null);
   const relationshipPendingRef = useRef<RelationshipMutation | null>(null);
+  const reviewTriggerRef = useRef<HTMLButtonElement>(null);
+  const reviewHeadingRef = useRef<HTMLHeadingElement>(null);
+  const removeTriggerRef = useRef<HTMLButtonElement>(null);
+  const removeCancelRef = useRef<HTMLButtonElement>(null);
+  const deleteTriggerRef = useRef<HTMLButtonElement>(null);
+  const deleteCancelRef = useRef<HTMLButtonElement>(null);
+  const feedbackRef = useRef<HTMLDivElement>(null);
   const [book, setBook] = useState<BookDetailDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -74,6 +81,51 @@ export default function BookDetailPage({
       requestSequenceRef.current += 1;
     };
   }, [id]);
+
+  useEffect(() => {
+    if (showReviewForm) {
+      window.requestAnimationFrame(() => reviewHeadingRef.current?.focus());
+    }
+  }, [showReviewForm]);
+
+  useEffect(() => {
+    if (showRemoveConfirm) {
+      window.requestAnimationFrame(() => removeCancelRef.current?.focus());
+    }
+  }, [showRemoveConfirm]);
+
+  useEffect(() => {
+    if (showDeleteConfirm) {
+      window.requestAnimationFrame(() => deleteCancelRef.current?.focus());
+    }
+  }, [showDeleteConfirm]);
+
+  function closeReviewForm(restoreFocus = true) {
+    setShowReviewForm(false);
+    if (restoreFocus) {
+      window.requestAnimationFrame(() => reviewTriggerRef.current?.focus());
+    }
+  }
+
+  function openRemoveConfirm() {
+    setShowDeleteConfirm(false);
+    setShowRemoveConfirm(true);
+  }
+
+  function closeRemoveConfirm() {
+    setShowRemoveConfirm(false);
+    window.requestAnimationFrame(() => removeTriggerRef.current?.focus());
+  }
+
+  function openDeleteConfirm() {
+    setShowRemoveConfirm(false);
+    setShowDeleteConfirm(true);
+  }
+
+  function closeDeleteConfirm() {
+    setShowDeleteConfirm(false);
+    window.requestAnimationFrame(() => deleteTriggerRef.current?.focus());
+  }
 
   async function fetchBook(
     requestedId: string,
@@ -220,7 +272,8 @@ export default function BookDetailPage({
     }
   }
 
-  async function submitReview() {
+  async function submitReview(event?: React.FormEvent) {
+    event?.preventDefault();
     if (reviewText.trim() && reviewRating === null) {
       setFeedback({
         type: "error",
@@ -231,6 +284,7 @@ export default function BookDetailPage({
     if (reviewRating === null || !beginRelationshipMutation("review")) return;
 
     const requestedId = id;
+    let saved = false;
     try {
       const relationship = await apiFetch<RelationshipDto>(
         `/api/books/${requestedId}`,
@@ -244,7 +298,8 @@ export default function BookDetailPage({
       applyRelationship(requestedId, relationship);
       setReviewText(relationship.review ?? "");
       setReviewRating(relationship.rating);
-      setShowReviewForm(false);
+      closeReviewForm(false);
+      saved = true;
       setFeedback({ type: "success", message: "Rating and review saved." });
       await fetchBook(requestedId);
     } catch (error) {
@@ -256,6 +311,9 @@ export default function BookDetailPage({
       }
     } finally {
       finishRelationshipMutation();
+      if (saved) {
+        window.requestAnimationFrame(() => reviewTriggerRef.current?.focus());
+      }
     }
   }
 
@@ -326,6 +384,7 @@ export default function BookDetailPage({
     if (!beginRelationshipMutation("remove")) return;
 
     const requestedId = id;
+    let removed = false;
     try {
       await apiFetch<{ success: true }>(
         `/api/books/${requestedId}/relationship`,
@@ -347,11 +406,10 @@ export default function BookDetailPage({
       setShowReviewForm(false);
       setReviewText("");
       setReviewRating(null);
+      setShowRemoveConfirm(false);
       setFeedback({ type: "success", message: "Your activity was removed." });
+      removed = true;
       await fetchBook(requestedId);
-      if (routeIdRef.current === requestedId) {
-        setShowRemoveConfirm(false);
-      }
     } catch (error) {
       if (routeIdRef.current === requestedId) {
         setFeedback({
@@ -361,19 +419,23 @@ export default function BookDetailPage({
       }
     } finally {
       finishRelationshipMutation();
+      if (removed) {
+        window.requestAnimationFrame(() => feedbackRef.current?.focus());
+      }
     }
   }
 
   if (loading || (book !== null && book.id !== id)) {
     return (
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-12">
-        <div className="flex items-center justify-center h-[400px]">
+        <div role="status" className="flex items-center justify-center gap-3 h-[400px] text-warm-700">
           <motion.div
             animate={{ rotate: 360 }}
             transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
           >
             <BookOpen className="w-8 h-8 text-warm-500" />
           </motion.div>
+          <span className="text-sm">Loading book details...</span>
         </div>
       </div>
     );
@@ -382,7 +444,7 @@ export default function BookDetailPage({
   if (notFound) {
     return (
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-12 text-center">
-        <p className="text-warm-500">Book not found</p>
+        <p className="text-warm-600">Book not found</p>
         <button
           onClick={() => router.back()}
           className="mt-4 text-warm-700 hover:underline"
@@ -397,7 +459,7 @@ export default function BookDetailPage({
     return (
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-12 text-center">
         <p className="font-medium text-warm-800">Unable to load this book</p>
-        <p className="mt-2 text-sm text-warm-500">
+        <p className="mt-2 text-sm text-warm-600">
           {loadError ?? "BookShare could not complete the request."}
         </p>
         <div className="mt-4 flex justify-center gap-4">
@@ -409,7 +471,7 @@ export default function BookDetailPage({
           </button>
           <button
             onClick={() => router.back()}
-            className="text-warm-500 hover:underline"
+            className="text-warm-700 hover:underline"
           >
             Go back
           </button>
@@ -426,7 +488,7 @@ export default function BookDetailPage({
       {/* Back button */}
       <button
         onClick={() => router.back()}
-        className="flex items-center gap-2 text-warm-500 hover:text-warm-700 transition-colors mb-6 text-sm"
+        className="flex min-h-11 items-center gap-2 text-warm-700 hover:text-warm-900 transition-colors mb-6 text-sm"
       >
         <ArrowLeft className="w-4 h-4" />
         Back to library
@@ -449,6 +511,8 @@ export default function BookDetailPage({
 
       {feedback && (
         <div
+          ref={feedbackRef}
+          tabIndex={-1}
           role={feedback.type === "error" ? "alert" : "status"}
           className={`mb-4 rounded-lg border px-4 py-3 text-sm ${
             feedback.type === "error"
@@ -504,7 +568,7 @@ export default function BookDetailPage({
 
           {/* Info */}
           <div className="flex-1 min-w-0">
-            <h1 className="font-serif text-3xl font-bold text-warm-900 mb-2">
+            <h1 className="break-words font-serif text-3xl font-bold text-warm-900 mb-2">
               {book.title}
             </h1>
             <p className="text-warm-600 text-lg mb-4">
@@ -514,11 +578,11 @@ export default function BookDetailPage({
             {/* Rating */}
             {book.averageRating && (
               <div className="flex items-center gap-3 mb-4">
-                <StarRating value={book.averageRating} readonly size="md" />
+                <StarRating value={book.averageRating} readonly size="md" label="Average rating" />
                 <span className="text-warm-600 font-medium">
                   {book.averageRating.toFixed(1)}
                 </span>
-                <span className="text-warm-400 text-sm">
+                <span className="text-warm-600 text-sm">
                   ({book.ratings.length}{" "}
                   {book.ratings.length === 1 ? "review" : "reviews"})
                 </span>
@@ -526,7 +590,7 @@ export default function BookDetailPage({
             )}
 
             {/* Meta info */}
-            <div className="flex flex-wrap gap-4 text-sm text-warm-500 mb-6">
+            <div className="flex flex-wrap gap-4 text-sm text-warm-600 mb-6">
               {book.pageCount && (
                 <span className="flex items-center gap-1.5">
                   <Layers className="w-4 h-4" />
@@ -553,7 +617,7 @@ export default function BookDetailPage({
                 {book.categories.map((cat) => (
                   <span
                     key={cat}
-                    className="px-3 py-1 bg-warm-100 text-warm-600 rounded-full text-xs font-medium"
+                    className="px-3 py-1 bg-warm-100 text-warm-700 rounded-full text-xs font-medium"
                   >
                     {cat}
                   </span>
@@ -592,8 +656,20 @@ export default function BookDetailPage({
                 disabled={relationshipLocked}
               />
               <button
-                onClick={() => setShowReviewForm(!showReviewForm)}
+                ref={reviewTriggerRef}
+                type="button"
+                onClick={() => {
+                  if (showReviewForm) {
+                    closeReviewForm();
+                  } else {
+                    setShowRemoveConfirm(false);
+                    setShowDeleteConfirm(false);
+                    setShowReviewForm(true);
+                  }
+                }}
                 disabled={relationshipLocked}
+                aria-expanded={showReviewForm}
+                aria-controls="book-review-form"
                 className="flex items-center gap-2 px-4 py-2 rounded-lg border border-amber-300 text-amber-700 hover:bg-amber-50 transition-colors text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Star className="w-4 h-4" />
@@ -603,9 +679,13 @@ export default function BookDetailPage({
             <div className="flex flex-wrap gap-2">
               {book.permissions.canRemoveRelationship && (
                 <button
-                  onClick={() => setShowRemoveConfirm(true)}
+                  ref={removeTriggerRef}
+                  type="button"
+                  onClick={openRemoveConfirm}
                   disabled={relationshipLocked}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-warm-500 hover:text-warm-700 hover:bg-warm-100 transition-colors text-xs disabled:cursor-not-allowed disabled:opacity-50"
+                  aria-expanded={showRemoveConfirm}
+                  aria-controls="remove-activity-confirmation"
+                  className="flex min-h-11 items-center gap-2 px-3 py-1.5 rounded-lg text-warm-700 hover:text-warm-900 hover:bg-warm-100 transition-colors text-xs disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <X className="w-3.5 h-3.5" />
                   Remove my activity
@@ -613,9 +693,13 @@ export default function BookDetailPage({
               )}
               {book.permissions.canDeleteGlobally && (
                 <button
-                  onClick={() => setShowDeleteConfirm(true)}
+                  ref={deleteTriggerRef}
+                  type="button"
+                  onClick={openDeleteConfirm}
                   disabled={relationshipLocked}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors text-xs disabled:cursor-not-allowed disabled:opacity-50"
+                  aria-expanded={showDeleteConfirm}
+                  aria-controls="delete-book-confirmation"
+                  className="flex min-h-11 items-center gap-2 px-3 py-1.5 rounded-lg text-red-700 hover:text-red-900 hover:bg-red-50 transition-colors text-xs disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                   Delete from shared library
@@ -631,18 +715,28 @@ export default function BookDetailPage({
                   exit={{ opacity: 0, height: 0 }}
                   className="overflow-hidden mt-4"
                 >
-                  <div className="p-4 bg-warm-50 border border-warm-200 rounded-lg">
-                    <p className="text-warm-800 text-sm font-medium mb-1">
+                  <div
+                    id="remove-activity-confirmation"
+                    role="region"
+                    aria-labelledby="remove-activity-title"
+                    aria-describedby="remove-activity-description"
+                    onKeyDown={(event) => {
+                      if (event.key === "Escape" && !relationshipLocked) closeRemoveConfirm();
+                    }}
+                    className="p-4 bg-warm-50 border border-warm-500 rounded-lg"
+                  >
+                    <p id="remove-activity-title" className="break-words text-warm-800 text-sm font-medium mb-1">
                       Remove your activity for &quot;{book.title}&quot;?
                     </p>
-                    <p className="text-warm-600 text-xs mb-3">
+                    <p id="remove-activity-description" className="text-warm-700 text-xs mb-3">
                       Your statuses, rating, and review will be removed. The book and everyone else&apos;s activity will remain.
                     </p>
-                    <div className="flex gap-2">
+                    <div className="flex flex-col gap-2 sm:flex-row">
                       <button
+                        type="button"
                         onClick={removeRelationship}
                         disabled={relationshipLocked}
-                        className="flex items-center gap-2 px-4 py-2 bg-warm-700 text-white rounded-lg text-sm font-medium hover:bg-warm-800 transition-colors disabled:opacity-50"
+                        className="flex min-h-11 w-full items-center justify-center gap-2 px-4 py-2 bg-warm-700 text-white rounded-lg text-sm font-medium hover:bg-warm-800 transition-colors disabled:opacity-50 sm:w-auto"
                       >
                         <X className="w-3.5 h-3.5" />
                         {relationshipPending === "remove"
@@ -650,9 +744,11 @@ export default function BookDetailPage({
                           : "Remove my activity"}
                       </button>
                       <button
-                        onClick={() => setShowRemoveConfirm(false)}
+                        ref={removeCancelRef}
+                        type="button"
+                        onClick={closeRemoveConfirm}
                         disabled={relationshipLocked}
-                        className="px-4 py-2 text-warm-600 hover:bg-warm-100 rounded-lg text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                        className="min-h-11 w-full px-4 py-2 text-warm-700 hover:bg-warm-100 rounded-lg text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
                       >
                         Cancel
                       </button>
@@ -671,26 +767,38 @@ export default function BookDetailPage({
                   exit={{ opacity: 0, height: 0 }}
                   className="overflow-hidden mt-4"
                 >
-                  <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-                    <p className="text-red-800 text-sm font-medium mb-1">
+                  <div
+                    id="delete-book-confirmation"
+                    role="region"
+                    aria-labelledby="delete-book-title"
+                    aria-describedby="delete-book-description"
+                    onKeyDown={(event) => {
+                      if (event.key === "Escape" && !deleting) closeDeleteConfirm();
+                    }}
+                    className="p-4 bg-red-50 border border-red-200 rounded-lg"
+                  >
+                    <p id="delete-book-title" className="break-words text-red-800 text-sm font-medium mb-1">
                       Delete &quot;{book.title}&quot; from the shared library?
                     </p>
-                    <p className="text-red-600 text-xs mb-3">
+                    <p id="delete-book-description" className="text-red-700 text-xs mb-3">
                       This will remove the book and all associated reviews, ratings, and ownership records for everyone.
                     </p>
-                    <div className="flex gap-2">
+                    <div className="flex flex-col gap-2 sm:flex-row">
                       <button
+                        type="button"
                         onClick={deleteBook}
                         disabled={deleting || relationshipPending !== null}
-                        className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-50"
+                        className="flex min-h-11 w-full items-center justify-center gap-2 px-4 py-2 bg-red-700 text-white rounded-lg text-sm font-medium hover:bg-red-800 transition-colors disabled:opacity-50 sm:w-auto"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                         {deleting ? "Deleting..." : "Yes, delete it"}
                       </button>
                       <button
-                        onClick={() => setShowDeleteConfirm(false)}
+                        ref={deleteCancelRef}
+                        type="button"
+                        onClick={closeDeleteConfirm}
                         disabled={deleting}
-                        className="px-4 py-2 text-warm-600 hover:bg-warm-100 rounded-lg text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                        className="min-h-11 w-full px-4 py-2 text-warm-700 hover:bg-warm-100 rounded-lg text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
                       >
                         Cancel
                       </button>
@@ -706,63 +814,72 @@ export default function BookDetailPage({
         <AnimatePresence>
           {showReviewForm && (
             <motion.div
+              id="book-review-form"
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
               className="overflow-hidden mb-8"
             >
-              <div className="card-warm p-6">
+              <form onSubmit={submitReview} className="card-warm p-4 sm:p-6">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-serif text-lg font-bold text-warm-900">
+                  <h3
+                    ref={reviewHeadingRef}
+                    tabIndex={-1}
+                    className="font-serif text-lg font-bold text-warm-900 focus:outline-none"
+                  >
                     Your Review
                   </h3>
                   <button
-                    onClick={() => setShowReviewForm(false)}
+                    type="button"
+                    onClick={() => closeReviewForm()}
                     disabled={relationshipLocked}
-                    className="text-warm-400 hover:text-warm-600 disabled:cursor-not-allowed disabled:opacity-50"
+                    aria-label="Close review form"
+                    className="flex h-11 w-11 items-center justify-center rounded-lg text-warm-600 hover:bg-warm-100 hover:text-warm-800 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <X className="w-5 h-5" />
                   </button>
                 </div>
 
                 <div className="mb-4">
-                  <label className="block text-sm font-medium text-warm-700 mb-2">
+                  <p className="block text-sm font-medium text-warm-700 mb-1">
                     Rating
-                  </label>
+                  </p>
                   <div className={relationshipLocked ? "opacity-50" : undefined}>
                     <StarRating
                       value={reviewRating}
                       onChange={setReviewRating}
                       readonly={relationshipLocked}
                       size="lg"
+                      label="Your rating"
                     />
                   </div>
                 </div>
 
                 <div className="mb-4">
-                  <label className="block text-sm font-medium text-warm-700 mb-2">
+                  <label htmlFor="review-text" className="block text-sm font-medium text-warm-700 mb-2">
                     Review (optional)
                   </label>
                   <textarea
+                    id="review-text"
                     value={reviewText}
                     onChange={(e) => setReviewText(e.target.value)}
                     disabled={relationshipLocked}
                     rows={4}
                     maxLength={5000}
-                    className="w-full px-4 py-3 bg-cream border border-warm-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-400 focus:border-transparent text-warm-900 placeholder-warm-400 resize-none text-sm disabled:cursor-not-allowed disabled:opacity-50"
+                    className="w-full px-4 py-3 bg-cream border border-warm-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-700 focus:border-transparent text-warm-900 placeholder-warm-600 resize-y text-base sm:text-sm disabled:cursor-not-allowed disabled:opacity-50"
                     placeholder="What did you think of this book?"
                   />
                 </div>
 
                 {reviewText.trim() && reviewRating === null && (
-                  <p className="mb-3 text-sm text-red-600" role="alert">
+                  <p className="mb-3 text-sm text-red-700" role="alert">
                     Choose a rating before saving a written review.
                   </p>
                 )}
 
                 <div className="flex flex-wrap gap-3">
                   <button
-                    onClick={submitReview}
+                    type="submit"
                     disabled={relationshipLocked || reviewRating === null}
                     className="bg-warm-700 text-cream px-6 py-2.5 rounded-lg font-medium hover:bg-warm-800 transition-colors disabled:opacity-50 text-sm"
                   >
@@ -773,9 +890,10 @@ export default function BookDetailPage({
                   {userBook &&
                     (userBook.rating !== null || userBook.review !== null) && (
                       <button
+                        type="button"
                         onClick={clearReview}
                         disabled={relationshipLocked}
-                        className="px-4 py-2.5 rounded-lg border border-warm-200 text-warm-600 hover:bg-warm-100 transition-colors disabled:cursor-not-allowed disabled:opacity-50 text-sm font-medium"
+                        className="px-4 py-2.5 rounded-lg border border-warm-500 text-warm-700 hover:bg-warm-100 transition-colors disabled:cursor-not-allowed disabled:opacity-50 text-sm font-medium"
                       >
                         {relationshipPending === "clear"
                           ? "Clearing..."
@@ -783,7 +901,7 @@ export default function BookDetailPage({
                       </button>
                     )}
                 </div>
-              </div>
+              </form>
             </motion.div>
           )}
         </AnimatePresence>
@@ -837,6 +955,7 @@ export default function BookDetailPage({
                   className="flex gap-4 pb-4 border-b border-warm-100 last:border-0 last:pb-0"
                 >
                   <div
+                    aria-hidden="true"
                     className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
                     style={{ backgroundColor: r.user.avatarColor }}
                   >
@@ -848,7 +967,12 @@ export default function BookDetailPage({
                       <span className="font-medium text-warm-900 text-sm">
                         {r.user.firstName} {r.user.lastName}
                       </span>
-                      <StarRating value={r.rating} readonly size="sm" />
+                      <StarRating
+                        value={r.rating}
+                        readonly
+                        size="sm"
+                        label={`${r.user.firstName} ${r.user.lastName}'s rating`}
+                      />
                     </div>
                     {r.review && (
                       <p className="text-warm-600 text-sm leading-relaxed">
@@ -881,12 +1005,14 @@ function StatusButton({
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
       disabled={disabled}
+      aria-pressed={active}
       className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium transition-all disabled:cursor-not-allowed disabled:opacity-50 ${
         active
           ? "bg-warm-700 text-cream border-warm-700"
-          : "bg-warm-50 text-warm-600 border-warm-200 hover:bg-warm-100"
+          : "bg-warm-50 text-warm-700 border-warm-500 hover:bg-warm-100"
       }`}
     >
       {active ? <Check className="w-4 h-4" /> : icon}
@@ -912,9 +1038,9 @@ function PeopleCard({
   return (
     <div className="card-warm p-5">
       <div className="flex items-center gap-2 mb-3">
-        <span className="text-warm-500">{icon}</span>
+        <span className="text-warm-700">{icon}</span>
         <h3 className="font-serif font-bold text-warm-900 text-sm">{title}</h3>
-        <span className="ml-auto text-warm-400 text-xs">{people.length}</span>
+        <span className="ml-auto text-warm-600 text-xs">{people.length}</span>
       </div>
       {people.length > 0 ? (
         <div className="flex flex-wrap gap-2">
@@ -924,6 +1050,7 @@ function PeopleCard({
               className="flex items-center gap-2 px-3 py-1.5 bg-cream rounded-full"
             >
               <div
+                aria-hidden="true"
                 className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white"
                 style={{ backgroundColor: p.avatarColor }}
               >
@@ -936,7 +1063,7 @@ function PeopleCard({
           ))}
         </div>
       ) : (
-        <p className="text-warm-400 text-xs italic">No one yet</p>
+        <p className="text-warm-600 text-xs italic">No one yet</p>
       )}
     </div>
   );

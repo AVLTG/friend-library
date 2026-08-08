@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useRef, useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import Shelf from "./Shelf";
 import BookSpine, { type BookData } from "./BookSpine";
@@ -73,7 +72,6 @@ function getSpineWidth(book: BookData): number {
 }
 
 export default function Bookshelf({ books }: BookshelfProps) {
-  const router = useRouter();
   const shelvesRef = useRef<HTMLDivElement>(null);
   const [shelfWidth, setShelfWidth] = useState(800);
 
@@ -175,7 +173,7 @@ export default function Bookshelf({ books }: BookshelfProps) {
                   key={book.id}
                   book={book}
                   index={bookIndex}
-                  onClick={() => router.push(`/book/${book.id}`)}
+                  href={`/book/${book.id}`}
                 />
               ))}
             </Shelf>

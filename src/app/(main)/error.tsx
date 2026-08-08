@@ -19,7 +19,7 @@ export default function MainError({
         <h1 className="font-serif text-xl font-bold text-warm-900 mb-2">
           This page could not be loaded
         </h1>
-        <p className="text-warm-500 text-sm mb-5">
+        <p className="text-warm-600 text-sm mb-5">
           Something unexpected happened. Your library data was not changed.
         </p>
         <button

@@ -167,13 +167,14 @@ export default function LibraryPage() {
   if (request.status === "loading") {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-12">
-        <div className="flex items-center justify-center h-[400px]">
+        <div role="status" className="flex items-center justify-center gap-3 h-[400px] text-warm-700">
           <motion.div
             animate={{ rotate: 360 }}
             transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
           >
             <BookOpen className="w-8 h-8 text-warm-500" />
           </motion.div>
+          <span className="text-sm">Loading the shared library...</span>
         </div>
       </div>
     );
@@ -186,7 +187,7 @@ export default function LibraryPage() {
           <h1 className="font-serif text-xl font-bold text-warm-900 mb-2">
             Couldn&apos;t load the shared library
           </h1>
-          <p className="text-warm-500 text-sm mb-5">{request.message}</p>
+          <p className="text-warm-600 text-sm mb-5">{request.message}</p>
           <button
             onClick={() => void fetchBooks()}
             className="bg-warm-700 text-cream px-4 py-2 rounded-lg font-medium hover:bg-warm-800 transition-colors text-sm"
@@ -201,12 +202,12 @@ export default function LibraryPage() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-8 pb-0">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="mb-6 flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="font-serif text-3xl font-bold text-warm-900">
             Shared Library
           </h1>
-          <p className="text-warm-500 text-sm mt-1">
+          <p className="text-warm-600 text-sm mt-1">
             {books.length} {books.length === 1 ? "book" : "books"} in the collection
           </p>
         </div>
@@ -241,12 +242,18 @@ export default function LibraryPage() {
         />
       </div>
 
+      <p className="sr-only" role="status" aria-live="polite">
+        Showing {filteredBooks.length} of {books.length} books
+      </p>
+
       {/* Bookshelf */}
       {filteredBooks.length > 0 ? (
-        <Bookshelf books={filteredBooks} />
+        <section aria-label="Books matching the current filters">
+          <Bookshelf books={filteredBooks} />
+        </section>
       ) : books.length > 0 ? (
         <div className="text-center py-16">
-          <p className="font-serif text-lg text-warm-500">
+          <p className="font-serif text-lg text-warm-600">
             No books match your search
           </p>
         </div>
@@ -263,7 +270,7 @@ export default function LibraryPage() {
             <h2 className="font-serif text-xl font-bold text-warm-700 mb-2">
               Your library is empty
             </h2>
-            <p className="text-warm-500 mb-6">
+            <p className="text-warm-600 mb-6">
               Start building your shared collection by adding your first book.
             </p>
             <Link

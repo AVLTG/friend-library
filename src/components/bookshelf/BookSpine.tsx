@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import Image from "next/image";
+import Link from "next/link";
 import { Star } from "lucide-react";
 
 export interface BookData {
@@ -19,23 +20,76 @@ export interface BookData {
 interface BookSpineProps {
   book: BookData;
   index: number;
-  onClick: () => void;
+  href: string;
 }
 
-export default function BookSpine({ book, index, onClick }: BookSpineProps) {
+interface PreviewPosition {
+  left: number;
+  top: number;
+  width: number;
+  below: boolean;
+}
+
+export default function BookSpine({ book, index, href }: BookSpineProps) {
   const [isHovered, setIsHovered] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
-  const [previewBelow, setPreviewBelow] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [previewPosition, setPreviewPosition] = useState<PreviewPosition>({
+    left: 12,
+    top: 12,
+    width: 180,
+    below: true,
+  });
   const hoverTimeout = useRef<ReturnType<typeof setTimeout>>(null);
-  const spineRef = useRef<HTMLDivElement>(null);
+  const spineRef = useRef<HTMLAnchorElement>(null);
+  const previewId = useId();
   const spineWidth = Math.max(28, Math.min(55, (book.pageCount || 200) / 8));
+  const active = isHovered || isFocused;
 
   const checkPosition = useCallback(() => {
     if (!spineRef.current) return;
     const rect = spineRef.current.getBoundingClientRect();
-    setPreviewBelow(rect.top < 350);
+    const gutter = 12;
+    const width = Math.min(220, window.innerWidth - gutter * 2);
+    const estimatedHeight = book.coverUrl ? Math.min(300, window.innerHeight - 24) : 130;
+    const spaceBelow = window.innerHeight - rect.bottom - gutter;
+    const spaceAbove = rect.top - gutter;
+    const below = spaceBelow >= estimatedHeight || spaceBelow >= spaceAbove;
+    const centeredLeft = rect.left + rect.width / 2 - width / 2;
+    const left = Math.max(
+      gutter,
+      Math.min(centeredLeft, window.innerWidth - width - gutter),
+    );
+    const top = below
+      ? Math.min(rect.bottom + gutter, window.innerHeight - estimatedHeight - gutter)
+      : Math.max(gutter, rect.top - estimatedHeight - gutter);
+
+    setPreviewPosition({ left, top: Math.max(gutter, top), width, below });
+  }, [book.coverUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
+    };
   }, []);
+
+  useEffect(() => {
+    if (!showPreview) return;
+    checkPosition();
+    window.addEventListener("resize", checkPosition);
+    window.addEventListener("scroll", checkPosition, true);
+    return () => {
+      window.removeEventListener("resize", checkPosition);
+      window.removeEventListener("scroll", checkPosition, true);
+    };
+  }, [checkPosition, showPreview]);
+
+  function showKeyboardPreview() {
+    setIsFocused(true);
+    checkPosition();
+    setShowPreview(true);
+  }
 
   function handleMouseEnter() {
     setIsHovered(true);
@@ -47,8 +101,13 @@ export default function BookSpine({ book, index, onClick }: BookSpineProps) {
 
   function handleMouseLeave() {
     setIsHovered(false);
-    setShowPreview(false);
+    if (!isFocused) setShowPreview(false);
     if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
+  }
+
+  function hideKeyboardPreview() {
+    setIsFocused(false);
+    if (!isHovered) setShowPreview(false);
   }
 
   function lightenColor(hex: string, amount: number): string {
@@ -59,212 +118,172 @@ export default function BookSpine({ book, index, onClick }: BookSpineProps) {
     return `rgb(${r}, ${g}, ${b})`;
   }
 
+  const accessibleName = book.authors.length
+    ? `${book.title} by ${book.authors.join(", ")}`
+    : book.title;
+  const previewDescription = [
+    book.averageRating ? `${book.averageRating.toFixed(1)} out of 5 stars` : "",
+    book.owners.length
+      ? `Owned by ${book.owners.map((owner) => owner.firstName).join(", ")}`
+      : "",
+  ]
+    .filter(Boolean)
+    .join(". ");
+
   return (
-    <motion.div
+    <Link
       ref={spineRef}
-      className="relative flex-shrink-0 cursor-pointer h-[190px]"
+      href={href}
+      aria-label={accessibleName}
+      aria-describedby={showPreview && previewDescription ? previewId : undefined}
+      className="relative h-[190px] flex-shrink-0 cursor-pointer rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cream focus-visible:ring-offset-2 focus-visible:ring-offset-warm-800"
       style={{ width: spineWidth }}
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.03, duration: 0.3 }}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      onClick={onClick}
+      onFocus={showKeyboardPreview}
+      onBlur={hideKeyboardPreview}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          setShowPreview(false);
+        }
+      }}
     >
-      {/* The spine itself */}
       <motion.div
-        className="relative h-full rounded-sm overflow-hidden"
-        style={{
-          backgroundColor: book.spineColor,
-          width: spineWidth,
-        }}
-        animate={{
-          y: isHovered ? -12 : 0,
-          scale: isHovered ? 1.02 : 1,
-        }}
-        transition={{ type: "spring", stiffness: 300, damping: 20 }}
+        className="relative h-full"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: index * 0.03, duration: 0.3 }}
       >
-        {/* Cover image — low-res stays visible, high-res fades in on top */}
-        {book.coverUrl ? (
-          <>
-            {/* Low-res: always visible as base layer */}
-            <Image
-              src={book.coverUrl}
-              alt=""
-              fill
-              className="object-cover"
-              sizes="100px"
-              quality={50}
-            />
-            {/* High-res: fades in on top when loaded */}
-            <Image
-              src={book.coverUrl}
-              alt=""
-              fill
-              className={`object-cover transition-opacity duration-700 ${
-                imageLoaded ? "opacity-100" : "opacity-0"
-              }`}
-              sizes="200px"
-              unoptimized
-              onLoad={() => setImageLoaded(true)}
-            />
-          </>
-        ) : null}
-
-        {/* Spine texture/gradient overlay */}
-        <div
-          className="absolute inset-0"
-          style={{
-            background: book.coverUrl
-              ? `linear-gradient(90deg,
-                  rgba(0,0,0,0.3) 0%,
-                  rgba(0,0,0,0.1) 20%,
-                  rgba(0,0,0,0.05) 50%,
-                  rgba(0,0,0,0.1) 80%,
-                  rgba(0,0,0,0.35) 100%)`
-              : `linear-gradient(90deg,
-                  rgba(0,0,0,0.15) 0%,
-                  rgba(255,255,255,0.08) 15%,
-                  rgba(255,255,255,0.05) 50%,
-                  rgba(0,0,0,0.1) 85%,
-                  rgba(0,0,0,0.2) 100%)`,
-          }}
-        />
-
-        {!book.coverUrl && (
-          <div
-            className="absolute top-3 left-1/2 -translate-x-1/2 h-[1px] rounded-full"
-            style={{
-              width: spineWidth - 10,
-              backgroundColor: lightenColor(book.spineColor, 60),
-            }}
-          />
-        )}
-
-        {/* Title on spine */}
-        <div
-          className="absolute inset-0 flex items-center justify-center px-1"
-          style={{ writingMode: "vertical-rl", textOrientation: "mixed" }}
+        <motion.div
+          className="relative h-full overflow-hidden rounded-sm"
+          style={{ backgroundColor: book.spineColor, width: spineWidth }}
+          animate={{ y: active ? -12 : 0, scale: active ? 1.02 : 1 }}
+          transition={{ type: "spring", stiffness: 300, damping: 20 }}
         >
-          <span
-            className="text-[10px] font-serif font-bold leading-tight tracking-wide truncate max-h-[85%]"
-            style={{
-              color: book.coverUrl
-                ? "#fff"
-                : lightenColor(book.spineColor, 140),
-              textShadow: book.coverUrl
-                ? "0 1px 3px rgba(0,0,0,0.8), 0 0px 6px rgba(0,0,0,0.4)"
-                : "none",
-            }}
-          >
-            {book.title}
-          </span>
-        </div>
+          {book.coverUrl ? (
+            <>
+              <Image
+                src={book.coverUrl}
+                alt=""
+                fill
+                className="object-cover"
+                sizes="100px"
+                quality={50}
+              />
+              <Image
+                src={book.coverUrl}
+                alt=""
+                fill
+                className={`object-cover transition-opacity duration-700 ${
+                  imageLoaded ? "opacity-100" : "opacity-0"
+                }`}
+                sizes="200px"
+                unoptimized
+                onLoad={() => setImageLoaded(true)}
+              />
+            </>
+          ) : null}
 
-        {!book.coverUrl && (
           <div
-            className="absolute bottom-3 left-1/2 -translate-x-1/2 h-[1px] rounded-full"
-            style={{
-              width: spineWidth - 10,
-              backgroundColor: lightenColor(book.spineColor, 60),
-            }}
-          />
-        )}
-
-        {isHovered && (
-          <motion.div
             className="absolute inset-0"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
             style={{
-              background: `radial-gradient(ellipse at center, rgba(255,255,255,0.15) 0%, transparent 70%)`,
+              background: book.coverUrl
+                ? "linear-gradient(90deg, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.1) 20%, rgba(0,0,0,0.05) 50%, rgba(0,0,0,0.1) 80%, rgba(0,0,0,0.35) 100%)"
+                : "linear-gradient(90deg, rgba(0,0,0,0.15) 0%, rgba(255,255,255,0.08) 15%, rgba(255,255,255,0.05) 50%, rgba(0,0,0,0.1) 85%, rgba(0,0,0,0.2) 100%)",
             }}
           />
-        )}
+
+          {!book.coverUrl && (
+            <div
+              className="absolute left-1/2 top-3 h-px -translate-x-1/2 rounded-full"
+              style={{
+                width: spineWidth - 10,
+                backgroundColor: lightenColor(book.spineColor, 60),
+              }}
+            />
+          )}
+
+          <div
+            className="absolute inset-0 flex items-center justify-center px-1"
+            style={{ writingMode: "vertical-rl", textOrientation: "mixed" }}
+          >
+            <span
+              className="max-h-[85%] truncate font-serif text-[10px] font-bold leading-tight tracking-wide"
+              style={{
+                color: book.coverUrl ? "#fff" : lightenColor(book.spineColor, 140),
+                textShadow: book.coverUrl
+                  ? "0 1px 3px rgba(0,0,0,0.8), 0 0 6px rgba(0,0,0,0.4)"
+                  : "none",
+              }}
+            >
+              {book.title}
+            </span>
+          </div>
+
+          {!book.coverUrl && (
+            <div
+              className="absolute bottom-3 left-1/2 h-px -translate-x-1/2 rounded-full"
+              style={{
+                width: spineWidth - 10,
+                backgroundColor: lightenColor(book.spineColor, 60),
+              }}
+            />
+          )}
+        </motion.div>
       </motion.div>
 
-      {/* Hover preview popup — absolute positioned, z-50 to float above shelf frame */}
       <AnimatePresence>
         {showPreview && (
           <motion.div
-            initial={{
-              opacity: 0,
-              y: previewBelow ? -10 : 10,
-              scale: 0.9,
-            }}
+            id={previewId}
+            role="tooltip"
+            aria-label={previewDescription || undefined}
+            initial={{ opacity: 0, y: previewPosition.below ? -6 : 6, scale: 0.96 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{
-              opacity: 0,
-              y: previewBelow ? -10 : 10,
-              scale: 0.9,
+            exit={{ opacity: 0, scale: 0.96 }}
+            transition={{ duration: 0.15 }}
+            className="pointer-events-none fixed z-[60]"
+            style={{
+              left: previewPosition.left,
+              top: previewPosition.top,
+              width: previewPosition.width,
             }}
-            transition={{ type: "spring", stiffness: 400, damping: 25 }}
-            className={`absolute left-1/2 -translate-x-1/2 z-50 pointer-events-none ${
-              previewBelow ? "top-full mt-4" : "bottom-full mb-4"
-            }`}
           >
-            <div className="bg-warm-50 border border-warm-200 rounded-xl p-3 shadow-2xl min-w-[180px]">
-              {/* Only show cover image if book has one */}
+            <div aria-hidden="true" className="max-h-[calc(100vh-1.5rem)] overflow-hidden rounded-xl border border-warm-500 bg-warm-50 p-3 shadow-2xl">
               {book.coverUrl && (
-                <div className="relative w-[120px] h-[180px] mx-auto mb-3 rounded-md overflow-hidden shadow-md">
+                <div className="relative mx-auto mb-3 h-[clamp(100px,25vh,180px)] w-[120px] overflow-hidden rounded-md shadow-md">
                   <Image
                     src={book.coverUrl}
-                    alt={book.title}
+                    alt=""
                     fill
                     className="object-cover"
                     sizes="120px"
                   />
                 </div>
               )}
-
-              <h3 className="font-serif font-bold text-sm text-warm-900 text-center leading-tight">
+              <h3 className="line-clamp-2 text-center font-serif text-sm font-bold leading-tight text-warm-900">
                 {book.title}
               </h3>
-              <p className="text-xs text-warm-500 text-center mt-1">
+              <p className="mt-1 line-clamp-2 text-center text-xs text-warm-700">
                 {book.authors.join(", ")}
               </p>
-
               {book.averageRating && (
-                <div className="flex items-center justify-center gap-1 mt-2">
-                  <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
+                <div className="mt-2 flex items-center justify-center gap-1">
+                  <Star className="h-3 w-3 fill-amber-500 text-amber-600" />
                   <span className="text-xs font-medium text-warm-700">
-                    {book.averageRating.toFixed(1)}
+                    {book.averageRating.toFixed(1)} out of 5
                   </span>
                 </div>
               )}
-
               {book.owners.length > 0 && (
-                <div className="flex items-center justify-center gap-1 mt-2">
-                  {book.owners.slice(0, 4).map((owner) => (
-                    <div
-                      key={owner.id}
-                      className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold text-white"
-                      style={{ backgroundColor: owner.avatarColor }}
-                      title={owner.firstName}
-                    >
-                      {owner.firstName[0]}
-                    </div>
-                  ))}
-                  {book.owners.length > 4 && (
-                    <span className="text-[10px] text-warm-500">
-                      +{book.owners.length - 4}
-                    </span>
-                  )}
-                </div>
+                <p className="mt-2 text-center text-[11px] text-warm-700">
+                  Owned by {book.owners.map((owner) => owner.firstName).join(", ")}
+                </p>
               )}
-
-              {/* Arrow */}
-              <div
-                className={`absolute left-1/2 -translate-x-1/2 w-4 h-4 bg-warm-50 border-warm-200 rotate-45 ${
-                  previewBelow
-                    ? "-top-2 border-l border-t"
-                    : "-bottom-2 border-r border-b"
-                }`}
-              />
             </div>
           </motion.div>
         )}
       </AnimatePresence>
-    </motion.div>
+    </Link>
   );
 }

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Merriweather, Inter } from "next/font/google";
+import MotionPreferences from "@/components/MotionPreferences";
 import "./globals.css";
 
 const merriweather = Merriweather({
@@ -26,7 +27,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${merriweather.variable} ${inter.variable}`}>
       <body className="min-h-screen bg-cream antialiased">
-        {children}
+        <MotionPreferences>{children}</MotionPreferences>
       </body>
     </html>
   );

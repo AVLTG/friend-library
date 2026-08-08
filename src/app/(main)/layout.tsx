@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
@@ -35,6 +35,24 @@ export default function MainLayout({
   const [logoutPending, setLogoutPending] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
   const logoutRequestRef = useRef(false);
+  const mobileMenuButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      setMobileMenuOpen(false);
+      mobileMenuButtonRef.current?.focus();
+    }
+
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [mobileMenuOpen]);
+
+  function isActive(href: string) {
+    return pathname === href || (href !== "/library" && pathname.startsWith(href));
+  }
 
   async function handleLogout() {
     if (logoutRequestRef.current) return;
@@ -65,12 +83,22 @@ export default function MainLayout({
 
   return (
     <div className="min-h-screen bg-cream">
+      <a
+        href="#main-content"
+        className="fixed left-4 top-3 z-[100] -translate-y-20 rounded-lg bg-cream px-4 py-2 font-medium text-warm-900 shadow-lg transition-transform focus:translate-y-0"
+      >
+        Skip to main content
+      </a>
       {/* Header */}
       <header className="sticky top-0 z-50 bg-warm-800 text-cream shadow-lg">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
-            <Link href="/library" className="flex items-center gap-2.5">
+            <Link
+              href="/library"
+              aria-label="BookShare shared library"
+              className="flex items-center gap-2.5"
+            >
               <div className="w-9 h-9 bg-warm-600 rounded-lg flex items-center justify-center">
                 <BookOpen className="w-5 h-5 text-cream" />
               </div>
@@ -80,12 +108,9 @@ export default function MainLayout({
             </Link>
 
             {/* Desktop Nav */}
-            <nav className="hidden md:flex items-center gap-1">
+            <nav aria-label="Primary" className="hidden lg:flex items-center gap-1">
               {navItems.map((item) => {
-                const isActive =
-                  pathname === item.href ||
-                  (item.href !== "/library" &&
-                    pathname.startsWith(item.href));
+                const itemIsActive = isActive(item.href);
                 const isLibrary =
                   item.href === "/library" &&
                   (pathname === "/library" ||
@@ -95,8 +120,9 @@ export default function MainLayout({
                   <Link
                     key={item.href}
                     href={item.href}
+                    aria-current={itemIsActive || isLibrary ? "page" : undefined}
                     className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      isActive || isLibrary
+                      itemIsActive || isLibrary
                         ? "bg-warm-700 text-cream"
                         : "text-warm-300 hover:text-cream hover:bg-warm-700/50"
                     }`}
@@ -109,9 +135,10 @@ export default function MainLayout({
             </nav>
 
             {/* Desktop Actions */}
-            <div className="hidden md:flex items-center gap-2">
+            <div className="hidden lg:flex items-center gap-2">
               <Link
                 href="/profile"
+                aria-current={pathname.startsWith("/profile") ? "page" : undefined}
                 className="flex items-center gap-2 px-3 py-2 rounded-lg text-warm-300 hover:text-cream hover:bg-warm-700/50 transition-colors text-sm"
               >
                 <User className="w-4 h-4" />
@@ -129,8 +156,13 @@ export default function MainLayout({
 
             {/* Mobile Menu Button */}
             <button
+              ref={mobileMenuButtonRef}
+              type="button"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden p-2 rounded-lg text-warm-300 hover:text-cream hover:bg-warm-700/50"
+              aria-label={mobileMenuOpen ? "Close navigation menu" : "Open navigation menu"}
+              aria-expanded={mobileMenuOpen}
+              aria-controls="mobile-navigation"
+              className="flex h-11 w-11 items-center justify-center rounded-lg text-warm-300 hover:bg-warm-700/50 hover:text-cream lg:hidden"
             >
               {mobileMenuOpen ? (
                 <X className="w-5 h-5" />
@@ -158,16 +190,20 @@ export default function MainLayout({
               animate={{ height: "auto", opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="md:hidden overflow-hidden border-t border-warm-700"
+              id="mobile-navigation"
+              className="overflow-hidden border-t border-warm-700 lg:hidden"
             >
-              <div className="px-4 py-3 space-y-1">
-                {navItems.map((item) => (
+              <nav aria-label="Mobile" className="space-y-1 px-4 py-3">
+                {navItems.map((item) => {
+                  const itemIsActive = isActive(item.href);
+                  return (
                   <Link
                     key={item.href}
                     href={item.href}
                     onClick={() => setMobileMenuOpen(false)}
+                    aria-current={itemIsActive ? "page" : undefined}
                     className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
-                      pathname === item.href
+                      itemIsActive
                         ? "bg-warm-700 text-cream"
                         : "text-warm-300 hover:text-cream hover:bg-warm-700/50"
                     }`}
@@ -175,11 +211,17 @@ export default function MainLayout({
                     <item.icon className="w-5 h-5" />
                     {item.label}
                   </Link>
-                ))}
+                  );
+                })}
                 <Link
                   href="/profile"
                   onClick={() => setMobileMenuOpen(false)}
-                  className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-warm-300 hover:text-cream hover:bg-warm-700/50 transition-colors"
+                  aria-current={pathname.startsWith("/profile") ? "page" : undefined}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
+                    pathname.startsWith("/profile")
+                      ? "bg-warm-700 text-cream"
+                      : "text-warm-300 hover:text-cream hover:bg-warm-700/50"
+                  }`}
                 >
                   <User className="w-5 h-5" />
                   My Library
@@ -192,14 +234,14 @@ export default function MainLayout({
                   <LogOut className="w-5 h-5" />
                   {logoutPending ? "Signing Out..." : "Sign Out"}
                 </button>
-              </div>
+              </nav>
             </motion.div>
           )}
         </AnimatePresence>
       </header>
 
       {/* Content */}
-      <main>{children}</main>
+      <main id="main-content" tabIndex={-1}>{children}</main>
     </div>
   );
 }

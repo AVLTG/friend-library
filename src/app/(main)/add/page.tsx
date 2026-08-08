@@ -106,6 +106,8 @@ export default function AddBookPage() {
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchController = useRef<AbortController | null>(null);
   const searchSequence = useRef(0);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const formHeadingRef = useRef<HTMLHeadingElement>(null);
 
   // Editable fields
   const [editTitle, setEditTitle] = useState("");
@@ -259,7 +261,14 @@ export default function AddBookPage() {
     setEditMode(true);
   }
 
-  async function handleAddBook() {
+  function closeBookForm() {
+    setSelectedBook(null);
+    setShowManual(false);
+    setEditMode(false);
+  }
+
+  async function handleAddBook(event?: React.FormEvent) {
+    event?.preventDefault();
     setSaving(true);
     setSaveError("");
     try {
@@ -318,7 +327,7 @@ export default function AddBookPage() {
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8">
       <button
         onClick={() => router.back()}
-        className="flex items-center gap-2 text-warm-500 hover:text-warm-700 transition-colors mb-6 text-sm"
+        className="flex min-h-11 items-center gap-2 text-warm-700 hover:text-warm-900 transition-colors mb-6 text-sm"
       >
         <ArrowLeft className="w-4 h-4" />
         Back
@@ -327,7 +336,7 @@ export default function AddBookPage() {
       <h1 className="font-serif text-3xl font-bold text-warm-900 mb-2">
         Add a Book
       </h1>
-      <p className="text-warm-500 text-sm mb-8">
+      <p className="text-warm-600 text-sm mb-8">
         Search for a book or add one manually.
       </p>
 
@@ -338,36 +347,36 @@ export default function AddBookPage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
+            onAnimationComplete={() => formHeadingRef.current?.focus()}
           >
-            <div className="card-warm p-6 mb-6">
+            <form onSubmit={handleAddBook} className="card-warm p-4 sm:p-6 mb-6">
               <div className="flex items-start justify-between mb-4">
-                <h2 className="font-serif text-lg font-bold text-warm-900">
+                <h2 ref={formHeadingRef} tabIndex={-1} className="font-serif text-lg font-bold text-warm-900 focus:outline-none">
                   {editMode ? "Edit Details" : "Confirm Book"}
                 </h2>
                 <div className="flex gap-2">
                   {!editMode && selectedBook && (
                     <button
+                      type="button"
                       onClick={() => setEditMode(true)}
-                      className="flex items-center gap-1.5 text-sm text-warm-500 hover:text-warm-700"
+                      className="flex min-h-11 items-center gap-1.5 rounded-lg px-2 text-sm text-warm-700 hover:bg-warm-100 hover:text-warm-900"
                     >
                       <Edit3 className="w-3.5 h-3.5" />
                       Edit
                     </button>
                   )}
                   <button
-                    onClick={() => {
-                      setSelectedBook(null);
-                      setShowManual(false);
-                      setEditMode(false);
-                    }}
-                    className="text-warm-400 hover:text-warm-600"
+                    type="button"
+                    onClick={closeBookForm}
+                    aria-label="Close book details"
+                    className="flex h-11 w-11 items-center justify-center rounded-lg text-warm-600 hover:bg-warm-100 hover:text-warm-800"
                   >
                     <X className="w-5 h-5" />
                   </button>
                 </div>
               </div>
 
-              <div className="flex gap-6">
+              <div className="flex flex-col gap-6 sm:flex-row">
                 {selectedBook?.coverUrl && !editMode && (
                   <div className="flex-shrink-0">
                     <div className="relative w-[100px] h-[150px] rounded-md overflow-hidden shadow-lg">
@@ -386,38 +395,38 @@ export default function AddBookPage() {
                   {editMode ? (
                     <>
                       <div>
-                        <label className="block text-xs font-medium text-warm-600 mb-1">Title *</label>
-                        <input type="text" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} maxLength={500} className="w-full px-3 py-2 bg-cream border border-warm-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-warm-400" />
+                        <label htmlFor="book-title" className="block text-xs font-medium text-warm-700 mb-1">Title</label>
+                        <input id="book-title" type="text" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} maxLength={500} required className="w-full px-3 py-2 bg-cream border border-warm-500 rounded-lg text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-warm-700" />
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-warm-600 mb-1">Authors * (comma separated)</label>
-                        <input type="text" value={editAuthors} onChange={(e) => setEditAuthors(e.target.value)} maxLength={4000} className="w-full px-3 py-2 bg-cream border border-warm-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-warm-400" />
+                        <label htmlFor="book-authors" className="block text-xs font-medium text-warm-700 mb-1">Authors (comma separated)</label>
+                        <input id="book-authors" type="text" value={editAuthors} onChange={(e) => setEditAuthors(e.target.value)} maxLength={4000} required className="w-full px-3 py-2 bg-cream border border-warm-500 rounded-lg text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-warm-700" />
                       </div>
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <div>
-                          <label className="block text-xs font-medium text-warm-600 mb-1">ISBN</label>
-                          <input type="text" value={editIsbn} onChange={(e) => setEditIsbn(e.target.value)} maxLength={20} className="w-full px-3 py-2 bg-cream border border-warm-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-warm-400" />
+                          <label htmlFor="book-isbn" className="block text-xs font-medium text-warm-700 mb-1">ISBN</label>
+                          <input id="book-isbn" type="text" value={editIsbn} onChange={(e) => setEditIsbn(e.target.value)} maxLength={20} className="w-full px-3 py-2 bg-cream border border-warm-500 rounded-lg text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-warm-700" />
                         </div>
                         <div>
-                          <label className="block text-xs font-medium text-warm-600 mb-1">Page Count</label>
-                          <input type="number" value={editPageCount} onChange={(e) => setEditPageCount(e.target.value)} min={1} max={99999} className="w-full px-3 py-2 bg-cream border border-warm-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-warm-400" />
+                          <label htmlFor="book-page-count" className="block text-xs font-medium text-warm-700 mb-1">Page Count</label>
+                          <input id="book-page-count" type="number" value={editPageCount} onChange={(e) => setEditPageCount(e.target.value)} min={1} max={99999} className="w-full px-3 py-2 bg-cream border border-warm-500 rounded-lg text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-warm-700" />
                         </div>
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-warm-600 mb-1">Published Date</label>
-                        <input type="text" value={editPublishedDate} onChange={(e) => setEditPublishedDate(e.target.value)} maxLength={20} placeholder="e.g. 2024" className="w-full px-3 py-2 bg-cream border border-warm-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-warm-400" />
+                        <label htmlFor="book-published-date" className="block text-xs font-medium text-warm-700 mb-1">Published Date</label>
+                        <input id="book-published-date" type="text" value={editPublishedDate} onChange={(e) => setEditPublishedDate(e.target.value)} maxLength={20} placeholder="e.g. 2024" className="w-full px-3 py-2 bg-cream border border-warm-500 rounded-lg text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-warm-700" />
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-warm-600 mb-1">Description</label>
-                        <textarea value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={3} maxLength={5000} className="w-full px-3 py-2 bg-cream border border-warm-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-warm-400 resize-none" />
+                        <label htmlFor="book-description" className="block text-xs font-medium text-warm-700 mb-1">Description</label>
+                        <textarea id="book-description" value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={3} maxLength={5000} className="w-full px-3 py-2 bg-cream border border-warm-500 rounded-lg text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-warm-700 resize-y" />
                       </div>
                     </>
                   ) : (
                     <>
-                      <h3 className="font-serif text-xl font-bold text-warm-900">{selectedBook?.title}</h3>
+                      <h3 className="break-words font-serif text-xl font-bold text-warm-900">{selectedBook?.title}</h3>
                       <p className="text-warm-600 text-sm">by {selectedBook?.authors.join(", ")}</p>
                       {selectedBook?.description && (
-                        <p className="text-warm-500 text-xs line-clamp-3">{selectedBook.description.replace(/<[^>]*>/g, "")}</p>
+                        <p className="text-warm-700 text-xs line-clamp-3">{selectedBook.description.replace(/<[^>]*>/g, "")}</p>
                       )}
                     </>
                   )}
@@ -425,20 +434,20 @@ export default function AddBookPage() {
               </div>
 
               {saveError && (
-                <p className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                <p role="alert" className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
                   {saveError}
                 </p>
               )}
 
               <button
-                onClick={handleAddBook}
+                type="submit"
                 disabled={saving || (editMode && (!editTitle || !editAuthors))}
                 className="mt-6 w-full flex items-center justify-center gap-2 bg-warm-700 text-cream py-3 rounded-lg font-medium hover:bg-warm-800 transition-colors disabled:opacity-50 text-sm"
               >
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                 {saving ? "Adding..." : "Add to Library"}
               </button>
-            </div>
+            </form>
           </motion.div>
         ) : (
           <motion.div
@@ -446,25 +455,31 @@ export default function AddBookPage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
+            onAnimationComplete={() => searchInputRef.current?.focus()}
           >
             {/* Search bar */}
             <div className="relative mb-6">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-warm-400" />
+              <Search aria-hidden="true" className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-warm-600" />
+              <label htmlFor="add-book-search" className="sr-only">Search by title, author, or ISBN</label>
               <input
-                type="text"
+                ref={searchInputRef}
+                id="add-book-search"
+                type="search"
                 value={query}
                 onChange={(e) => handleSearchInput(e.target.value)}
                 placeholder="Search by title, author, or ISBN..."
-                className="w-full pl-12 pr-4 py-3.5 bg-warm-50 border border-warm-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-warm-400 focus:border-transparent text-warm-900 placeholder-warm-400"
+                aria-controls="book-search-results"
+                aria-busy={searching}
+                className="w-full pl-12 pr-12 py-3.5 bg-warm-50 border border-warm-500 rounded-xl focus:outline-none focus:ring-2 focus:ring-warm-700 focus:border-transparent text-warm-900 placeholder-warm-600"
                 autoFocus
               />
               {searching && (
-                <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-warm-400 animate-spin" />
+                <Loader2 aria-hidden="true" className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-warm-600 animate-spin" />
               )}
             </div>
 
             {libraryStatus === "error" && (
-              <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+              <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
                 <p>{libraryError}</p>
                 <button
                   onClick={() => setLibraryRequest((request) => request + 1)}
@@ -476,7 +491,7 @@ export default function AddBookPage() {
             )}
 
             {searchError && (
-              <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+              <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
                 <p>{searchError}</p>
                 <button
                   onClick={() => handleSearchInput(query)}
@@ -489,15 +504,15 @@ export default function AddBookPage() {
 
             {/* Results */}
             {results.length > 0 && (
-              <div className="mb-6">
+              <section id="book-search-results" aria-busy={searching} className="mb-6">
                 {/* Already in library section */}
                 {matchedResults.length > 0 && (
                   <>
                     <div className="flex items-center gap-2 mb-2 px-1">
                       <Library className="w-4 h-4 text-warm-400" />
-                      <span className="text-xs font-medium text-warm-500 uppercase tracking-wider">
+                      <h2 className="text-xs font-medium text-warm-700 uppercase tracking-wider">
                         Already in your library
-                      </span>
+                      </h2>
                       <div className="flex-1 h-[1px] bg-warm-200" />
                     </div>
                     <div className="space-y-2">
@@ -521,8 +536,8 @@ export default function AddBookPage() {
                           )}
                           <div className="flex-1 min-w-0">
                             <h3 className="font-serif font-bold text-warm-900 text-sm truncate">{book.title}</h3>
-                            <p className="text-warm-500 text-xs truncate">{book.authors.join(", ")}</p>
-                            <p className="text-warm-400 text-xs mt-1 italic">Already in shared library</p>
+                            <p className="text-warm-700 text-xs truncate">{book.authors.join(", ")}</p>
+                            <p className="text-warm-600 text-xs mt-1 italic">Already in shared library</p>
                           </div>
                           <ArrowRight className="w-4 h-4 text-warm-400 flex-shrink-0" />
                         </motion.button>
@@ -541,9 +556,9 @@ export default function AddBookPage() {
                     {(matchedResults.length > 0 || libraryStatus !== "ready") && (
                       <div className="flex items-center gap-2 mb-2 px-1">
                         <Plus className="w-4 h-4 text-warm-400" />
-                        <span className="text-xs font-medium text-warm-500 uppercase tracking-wider">
+                        <h2 className="text-xs font-medium text-warm-700 uppercase tracking-wider">
                           {libraryStatus === "ready" ? "Add new" : "Search results"}
-                        </span>
+                        </h2>
                         <div className="flex-1 h-[1px] bg-warm-200" />
                       </div>
                     )}
@@ -568,9 +583,9 @@ export default function AddBookPage() {
                           )}
                           <div className="flex-1 min-w-0">
                             <h3 className="font-serif font-bold text-warm-900 text-sm truncate">{book.title}</h3>
-                            <p className="text-warm-500 text-xs truncate">{book.authors.join(", ")}</p>
+                            <p className="text-warm-700 text-xs truncate">{book.authors.join(", ")}</p>
                             {book.publishedDate && (
-                              <p className="text-warm-400 text-xs mt-0.5">{book.publishedDate}</p>
+                              <p className="text-warm-600 text-xs mt-0.5">{book.publishedDate}</p>
                             )}
                             {book.possibleWorkTitle && (
                               <p className="text-amber-700/80 text-xs mt-1">
@@ -583,7 +598,7 @@ export default function AddBookPage() {
                               </p>
                             )}
                             {libraryStatus === "loading" && (
-                              <p className="text-warm-400 text-xs mt-1 italic">
+                              <p className="text-warm-600 text-xs mt-1 italic">
                                 Checking the shared library for matches
                               </p>
                             )}
@@ -599,13 +614,13 @@ export default function AddBookPage() {
                     </div>
                   </>
                 )}
-              </div>
+              </section>
             )}
 
             {/* No results */}
             {query.trim().length >= 2 && !searching && !searchError && results.length === 0 && (
-              <div className="text-center py-8">
-                <p className="text-warm-500 text-sm mb-2">
+              <div role="status" className="text-center py-8">
+                <p className="text-warm-600 text-sm mb-2">
                   No books found for &quot;{query.trim()}&quot;
                 </p>
               </div>
@@ -614,8 +629,9 @@ export default function AddBookPage() {
             {/* Manual entry */}
             <div className="text-center pt-4 border-t border-warm-200">
               <button
+                type="button"
                 onClick={startManualEntry}
-                className="text-sm text-warm-500 hover:text-warm-700 underline decoration-warm-300"
+                className="min-h-11 text-sm text-warm-700 hover:text-warm-900 underline decoration-warm-500"
               >
                 Can&apos;t find it? Add manually
               </button>
@@ -623,6 +639,13 @@ export default function AddBookPage() {
           </motion.div>
         )}
       </AnimatePresence>
+      <p className="sr-only" role="status" aria-live="polite">
+        {searching
+          ? "Searching for books"
+          : !searchError && results.length > 0
+              ? `${results.length} search ${results.length === 1 ? "result" : "results"}`
+              : ""}
+      </p>
     </div>
   );
 }
