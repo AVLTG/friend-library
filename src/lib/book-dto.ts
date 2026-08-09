@@ -1,6 +1,7 @@
 import type {
   BookDetailDto,
   BookDto,
+  BookIdentityDto,
   PublicUserDto,
   ReadingEntryDto,
   RelationshipDto,
@@ -10,7 +11,24 @@ import type { GoogleBookResult } from "./google-books";
 import type { Book, User, UserBook } from "./db/schema";
 import { safeCoverUrl } from "./validation";
 
-type BookUser = { userBook: UserBook; user: User };
+type PublicUser = Pick<
+  User,
+  "id" | "username" | "firstName" | "lastName" | "avatarColor"
+>;
+type PublicRelationship = Pick<
+  UserBook,
+  | "owned"
+  | "read"
+  | "currentlyReading"
+  | "annotated"
+  | "rating"
+  | "review"
+  | "updatedAt"
+>;
+export type BookUser = {
+  userBook: PublicRelationship;
+  user: PublicUser;
+};
 
 function isoDate(value: Date | number | string): string {
   return new Date(value).toISOString();
@@ -28,7 +46,7 @@ function stringArray(value: string | null): string[] {
   }
 }
 
-export function toPublicUser(user: User): PublicUserDto {
+export function toPublicUser(user: PublicUser): PublicUserDto {
   return {
     id: user.id,
     username: user.username,
@@ -70,7 +88,9 @@ export function toBookDto(
   const publicUsers = (predicate: (entry: BookUser) => boolean) =>
     bookUsers.filter(predicate).map(({ user }) => toPublicUser(user));
   const rated = bookUsers.filter(
-    (entry): entry is BookUser & { userBook: UserBook & { rating: number } } =>
+    (entry): entry is BookUser & {
+      userBook: PublicRelationship & { rating: number };
+    } =>
       entry.userBook.rating !== null,
   );
   const current = bookUsers.find((entry) => entry.user.id === currentUserId);
@@ -109,16 +129,30 @@ export function toBookDto(
   };
 }
 
+export function toBookIdentityDto(
+  book: Pick<Book, "id" | "title" | "authors" | "isbn">,
+  googleBooksIds: string[],
+): BookIdentityDto {
+  return {
+    id: book.id,
+    googleBooksIds,
+    isbn: book.isbn,
+    title: book.title,
+    authors: stringArray(book.authors),
+  };
+}
+
 export function toBookDetailDto(
   book: Book,
   bookUsers: BookUser[],
-  currentUserId: string,
+  currentUser: PublicUser,
   canDeleteGlobally: boolean,
   googleBooksIds?: string[],
 ): BookDetailDto {
-  const dto = toBookDto(book, bookUsers, currentUserId, googleBooksIds);
+  const dto = toBookDto(book, bookUsers, currentUser.id, googleBooksIds);
   return {
     ...dto,
+    currentUser: toPublicUser(currentUser),
     permissions: {
       canDeleteGlobally,
       canRemoveRelationship: dto.currentUserBook !== null,

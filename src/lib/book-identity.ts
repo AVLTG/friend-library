@@ -48,14 +48,32 @@ export function normalizeDuplicateText(value: string): string {
     .replace(/[^\p{L}\p{N}]/gu, "");
 }
 
+export function resolveEditionIdentity<T extends { id: string; isbn: string | null }>(
+  googleMatch: T | undefined,
+  isbnMatch: T | undefined,
+  incomingIsbn: string | null,
+): { match: T | null; conflict: boolean } {
+  const conflict = Boolean(
+    (googleMatch && isbnMatch && googleMatch.id !== isbnMatch.id) ||
+      (googleMatch?.isbn &&
+        incomingIsbn &&
+        googleMatch.isbn !== incomingIsbn),
+  );
+
+  return {
+    match: conflict ? null : (googleMatch ?? isbnMatch ?? null),
+    conflict,
+  };
+}
+
 export function findEditionIdentityMatch(
   googleBooksId: string | null,
   isbn: string | null,
-  books: Array<{
+  books: readonly {
     id: string;
-    googleBooksIds: string[];
+    googleBooksIds: readonly string[];
     isbn: string | null;
-  }>,
+  }[],
 ): { bookId: string | null; conflict: boolean } {
   const normalizedGoogleId = googleBooksId
     ? normalizeGoogleBooksId(googleBooksId)
@@ -73,12 +91,14 @@ export function findEditionIdentityMatch(
         (book) => book.isbn && normalizeIsbn(book.isbn) === normalizedIsbn,
       )
     : undefined;
-  const conflict = Boolean(
-    googleMatch && isbnMatch && googleMatch.id !== isbnMatch.id,
+  const { match, conflict } = resolveEditionIdentity(
+    googleMatch,
+    isbnMatch,
+    normalizedIsbn,
   );
 
   return {
-    bookId: conflict ? null : (googleMatch || isbnMatch)?.id || null,
+    bookId: match?.id ?? null,
     conflict,
   };
 }

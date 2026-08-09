@@ -3,8 +3,8 @@ import { normalizeGoogleBooksId, normalizeIsbn } from "./book-identity";
 import { sanitizeText } from "./sanitize";
 import { safeCoverUrl } from "./validation";
 
-function truncate(value: string | undefined, maxLength: number) {
-  return value?.slice(0, maxLength);
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object";
 }
 
 function normalizeAuthors(authors: unknown): string[] {
@@ -39,38 +39,22 @@ export interface GoogleBookResult {
   categories?: string[];
 }
 
-interface GoogleBooksVolume {
-  id: string;
-  volumeInfo: {
-    title: string;
-    authors?: string[];
-    description?: string;
-    industryIdentifiers?: Array<{ type: string; identifier: string }>;
-    imageLinks?: { thumbnail?: string; smallThumbnail?: string };
-    pageCount?: number;
-    publishedDate?: string;
-    categories?: string[];
-  };
-}
-
 function normalizeVolume(item: unknown): GoogleBookResult | null {
-  if (!item || typeof item !== "object") return null;
-  const rawItem = item as Partial<GoogleBooksVolume>;
-  if (typeof rawItem.id !== "string") return null;
-  const id = normalizeGoogleBooksId(rawItem.id);
-  const info = rawItem.volumeInfo;
-  if (!info || typeof info !== "object") return null;
+  if (!isRecord(item) || typeof item.id !== "string") return null;
+  const id = normalizeGoogleBooksId(item.id);
+  const info = item.volumeInfo;
+  if (!isRecord(info)) return null;
   const title = typeof info.title === "string" ? sanitizeText(info.title, 500) : "";
   if (!id || !title) return null;
 
-  const identifiers = Array.isArray(info.industryIdentifiers)
+  const identifiers: Array<{ type: string; identifier: string }> = Array.isArray(
+    info.industryIdentifiers,
+  )
     ? info.industryIdentifiers.filter(
         (entry): entry is { type: string; identifier: string } =>
-          Boolean(
-            entry &&
-              typeof entry.type === "string" &&
-              typeof entry.identifier === "string",
-          ),
+          isRecord(entry) &&
+          typeof entry.type === "string" &&
+          typeof entry.identifier === "string",
       )
     : [];
   const isbn =
@@ -84,11 +68,12 @@ function normalizeVolume(item: unknown): GoogleBookResult | null {
       .find((value) => value !== null) ||
     undefined;
 
+  const imageLinks = isRecord(info.imageLinks) ? info.imageLinks : null;
   let coverUrl =
-    typeof info.imageLinks?.thumbnail === "string"
-      ? info.imageLinks.thumbnail
-      : typeof info.imageLinks?.smallThumbnail === "string"
-        ? info.imageLinks.smallThumbnail
+    typeof imageLinks?.thumbnail === "string"
+      ? imageLinks.thumbnail
+      : typeof imageLinks?.smallThumbnail === "string"
+        ? imageLinks.smallThumbnail
         : undefined;
   if (coverUrl) {
     coverUrl = coverUrl
@@ -101,10 +86,10 @@ function normalizeVolume(item: unknown): GoogleBookResult | null {
     id,
     title,
     authors: normalizeAuthors(info.authors),
-    description: truncate(
-      typeof info.description === "string" ? info.description : undefined,
-      5000,
-    ),
+    description:
+      typeof info.description === "string"
+        ? sanitizeText(info.description, 5000)
+        : undefined,
     isbn,
     coverUrl: safeCoverUrl(coverUrl) || undefined,
     pageCount:
@@ -114,10 +99,10 @@ function normalizeVolume(item: unknown): GoogleBookResult | null {
       info.pageCount <= 99999
         ? info.pageCount
         : undefined,
-    publishedDate: truncate(
-      typeof info.publishedDate === "string" ? info.publishedDate : undefined,
-      20,
-    ),
+    publishedDate:
+      typeof info.publishedDate === "string"
+        ? sanitizeText(info.publishedDate, 20)
+        : undefined,
     categories: normalizeCategories(info.categories),
   };
 }
@@ -149,30 +134,10 @@ export async function searchBooks(query: string): Promise<GoogleBookResult[]> {
     );
   }
 
-  const data: { items?: unknown[] } = await response.json();
-
-  if (!data.items) return [];
+  const data: unknown = await response.json();
+  if (!isRecord(data) || !Array.isArray(data.items)) return [];
 
   return data.items
     .map(normalizeVolume)
     .filter((book): book is GoogleBookResult => book !== null);
-}
-
-export async function getBookById(
-  googleBooksId: string
-): Promise<GoogleBookResult | null> {
-  const normalizedId = normalizeGoogleBooksId(googleBooksId);
-  if (!normalizedId) return null;
-  const apiKey = getGoogleBooksApiKey();
-  const params = new URLSearchParams();
-  if (apiKey) params.set("key", apiKey);
-
-  const response = await fetch(
-    `https://www.googleapis.com/books/v1/volumes/${encodeURIComponent(normalizedId)}?${params}`
-  );
-
-  if (!response.ok) return null;
-
-  const item: GoogleBooksVolume = await response.json();
-  return normalizeVolume(item);
 }

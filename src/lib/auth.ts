@@ -12,8 +12,6 @@ import {
   verifySessionToken,
 } from "./session-token";
 
-export type { SessionPayload } from "./session-token";
-
 export async function createSession(payload: SessionPayload): Promise<string> {
   return createSessionToken(payload);
 }
@@ -72,19 +70,6 @@ export function clearSessionCookie(response: NextResponse): void {
   if (SESSION_COOKIE_NAME !== LEGACY_SESSION_COOKIE_NAME) {
     expireSessionCookie(response, LEGACY_SESSION_COOKIE_NAME);
   }
-}
-
-export async function getCurrentUser() {
-  const session = await getSession();
-  if (!session) return null;
-
-  const user = await db
-    .select()
-    .from(users)
-    .where(eq(users.id, session.userId))
-    .get();
-
-  return user || null;
 }
 
 export function generateId(): string {

@@ -3,6 +3,7 @@ import { bookGoogleIds, books, userBooks } from "./db/schema";
 import { withSqliteBusyRetry } from "./db/transaction";
 import { isSqliteUniqueConstraint } from "./db/errors";
 import { maintenanceTransaction } from "./db/maintenance-write";
+import { resolveEditionIdentity } from "./book-identity";
 
 export class BookIdentityConflictError extends Error {
   constructor() {
@@ -10,7 +11,7 @@ export class BookIdentityConflictError extends Error {
   }
 }
 
-export type CreateOrAttachBookResult = {
+type CreateOrAttachBookResult = {
   bookId: string;
   bookCreated: boolean;
   relationshipCreated: boolean;
@@ -26,18 +27,6 @@ async function serializeBookWrite<T>(operation: () => Promise<T>): Promise<T> {
     () => undefined,
   );
   return result;
-}
-
-export async function createBookWithOwner(
-  book: typeof books.$inferInsert,
-  owner: typeof userBooks.$inferInsert,
-): Promise<void> {
-  await withSqliteBusyRetry(() =>
-    maintenanceTransaction(async (tx) => {
-      await tx.insert(books).values(book);
-      await tx.insert(userBooks).values(owner);
-    }),
-  );
 }
 
 export async function createOrAttachBook(
@@ -70,18 +59,16 @@ export async function createOrAttachBook(
             .where(eq(books.isbn, book.isbn))
             .get()
         : undefined;
-      if (googleMatch && isbnMatch && googleMatch.id !== isbnMatch.id) {
-        throw new BookIdentityConflictError();
-      }
-      if (
-        googleMatch?.isbn &&
-        book.isbn &&
-        googleMatch.isbn !== book.isbn
-      ) {
+      const identity = resolveEditionIdentity(
+        googleMatch,
+        isbnMatch,
+        book.isbn ?? null,
+      );
+      if (identity.conflict) {
         throw new BookIdentityConflictError();
       }
 
-      const existing = googleMatch || isbnMatch;
+      const existing = identity.match;
       if (!existing) {
         await tx.insert(books).values(book);
         if (book.googleBooksId) {

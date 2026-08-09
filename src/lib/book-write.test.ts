@@ -41,10 +41,10 @@ afterAll(async () => {
 
 describe("book creation", () => {
   it("rolls back the book when owner relationship creation fails", async () => {
-    const { createBookWithOwner } = await import("./book-write");
+    const { createOrAttachBook } = await import("./book-write");
 
     await expect(
-      createBookWithOwner(
+      createOrAttachBook(
         {
           id: bookId,
           title: "Rollback Book",

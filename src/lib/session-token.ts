@@ -43,13 +43,15 @@ export async function verifySessionToken(
       audience: SESSION_AUDIENCE,
     });
 
+    const sessionVersion = payload.sessionVersion;
     if (
       typeof payload.sub !== "string" ||
       !/^[A-Za-z0-9]{21}$/.test(payload.sub) ||
       typeof payload.username !== "string" ||
       !/^[a-z0-9_-]{3,20}$/.test(payload.username) ||
-      !Number.isInteger(payload.sessionVersion) ||
-      (payload.sessionVersion as number) < 0
+      typeof sessionVersion !== "number" ||
+      !Number.isInteger(sessionVersion) ||
+      sessionVersion < 0
     ) {
       return null;
     }
@@ -57,7 +59,7 @@ export async function verifySessionToken(
     return {
       userId: payload.sub,
       username: payload.username,
-      sessionVersion: payload.sessionVersion as number,
+      sessionVersion,
     };
   } catch {
     return null;

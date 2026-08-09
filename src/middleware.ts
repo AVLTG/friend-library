@@ -38,7 +38,10 @@ function unauthorized(
   clearCurrentCookie: boolean,
 ): NextResponse {
   const response = request.nextUrl.pathname.startsWith("/api/")
-    ? NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    ? NextResponse.json(
+        { error: "Unauthorized", code: "UNAUTHORIZED" },
+        { status: 401 },
+      )
     : NextResponse.redirect(new URL("/login", request.url));
 
   if (clearCurrentCookie) clearCookie(response, SESSION_COOKIE_NAME);
@@ -65,14 +68,20 @@ export async function middleware(request: NextRequest) {
       const origin = request.headers.get("origin");
       if (!origin || !getAllowedOrigins().has(origin)) {
         return finish(
-          NextResponse.json({ error: "Invalid request origin" }, { status: 403 }),
+          NextResponse.json(
+            { error: "Invalid request origin", code: "INVALID_ORIGIN" },
+            { status: 403 },
+          ),
         );
       }
     } catch (error) {
       console.error("Origin configuration error:", error);
       return finish(
         NextResponse.json(
-          { error: "Security configuration unavailable" },
+          {
+            error: "Security configuration unavailable",
+            code: "SECURITY_CONFIGURATION_UNAVAILABLE",
+          },
           { status: 503 },
         ),
       );
@@ -94,7 +103,10 @@ export async function middleware(request: NextRequest) {
       console.error("Session verification error:", error);
       return finish(
         NextResponse.json(
-          { error: "Authentication configuration unavailable" },
+          {
+            error: "Authentication configuration unavailable",
+            code: "AUTHENTICATION_CONFIGURATION_UNAVAILABLE",
+          },
           { status: 503 },
         ),
       );

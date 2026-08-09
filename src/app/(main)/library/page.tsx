@@ -6,8 +6,14 @@ import { BookOpen, Plus } from "lucide-react";
 import Link from "next/link";
 import Bookshelf from "@/components/bookshelf/Bookshelf";
 import FilterBar from "@/components/bookshelf/FilterBar";
+import LoadError from "@/components/LoadError";
+import LoadingState from "@/components/LoadingState";
 import { apiErrorMessage, apiFetch } from "@/lib/api-client";
-import type { BookDto, PublicUserDto } from "@/lib/api-types";
+import {
+  booksResponseSchema,
+  type BookDto,
+  type PublicUserDto,
+} from "@/lib/api-types";
 
 type BooksRequest =
   | { status: "loading" }
@@ -37,7 +43,7 @@ export default function LibraryPage() {
     setRequest({ status: "loading" });
 
     try {
-      const books = await apiFetch<BookDto[]>("/api/books", {
+      const books = await apiFetch("/api/books", booksResponseSchema, {
         signal: controller.signal,
       });
       if (!controller.signal.aborted) {
@@ -167,15 +173,10 @@ export default function LibraryPage() {
   if (request.status === "loading") {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-12">
-        <div role="status" className="flex items-center justify-center gap-3 h-[400px] text-warm-700">
-          <motion.div
-            animate={{ rotate: 360 }}
-            transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-          >
-            <BookOpen className="w-8 h-8 text-warm-500" />
-          </motion.div>
-          <span className="text-sm">Loading the shared library...</span>
-        </div>
+        <LoadingState
+          message="Loading the shared library..."
+          className="h-[400px]"
+        />
       </div>
     );
   }
@@ -183,18 +184,11 @@ export default function LibraryPage() {
   if (request.status === "error") {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-12">
-        <div className="card-warm max-w-xl mx-auto p-6 text-center">
-          <h1 className="font-serif text-xl font-bold text-warm-900 mb-2">
-            Couldn&apos;t load the shared library
-          </h1>
-          <p className="text-warm-600 text-sm mb-5">{request.message}</p>
-          <button
-            onClick={() => void fetchBooks()}
-            className="bg-warm-700 text-cream px-4 py-2 rounded-lg font-medium hover:bg-warm-800 transition-colors text-sm"
-          >
-            Try Again
-          </button>
-        </div>
+        <LoadError
+          title="Couldn't load the shared library"
+          message={request.message}
+          onRetry={() => void fetchBooks()}
+        />
       </div>
     );
   }

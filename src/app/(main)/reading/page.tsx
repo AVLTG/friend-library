@@ -5,8 +5,13 @@ import Image from "next/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { BookOpen, BookMarked } from "lucide-react";
+import LoadError from "@/components/LoadError";
+import LoadingState from "@/components/LoadingState";
 import { apiErrorMessage, apiFetch } from "@/lib/api-client";
-import type { ReadingEntryDto } from "@/lib/api-types";
+import {
+  readingEntriesResponseSchema,
+  type ReadingEntryDto,
+} from "@/lib/api-types";
 
 type ReadingRequest =
   | { status: "loading" }
@@ -24,9 +29,11 @@ export default function ReadingPage() {
     setRequest({ status: "loading" });
 
     try {
-      const entries = await apiFetch<ReadingEntryDto[]>("/api/books/reading", {
-        signal: controller.signal,
-      });
+      const entries = await apiFetch(
+        "/api/books/reading",
+        readingEntriesResponseSchema,
+        { signal: controller.signal },
+      );
       if (!controller.signal.aborted) {
         setRequest({ status: "success", entries });
       }
@@ -70,15 +77,10 @@ export default function ReadingPage() {
   if (request.status === "loading") {
     return (
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-12">
-        <div role="status" className="flex items-center justify-center gap-3 h-[300px] text-warm-700">
-          <motion.div
-            animate={{ rotate: 360 }}
-            transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-          >
-            <BookOpen className="w-8 h-8 text-warm-500" />
-          </motion.div>
-          <span className="text-sm">Loading current reading activity...</span>
-        </div>
+        <LoadingState
+          message="Loading current reading activity..."
+          className="h-[300px]"
+        />
       </div>
     );
   }
@@ -86,18 +88,11 @@ export default function ReadingPage() {
   if (request.status === "error") {
     return (
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-12">
-        <div className="card-warm max-w-xl mx-auto p-6 text-center">
-          <h1 className="font-serif text-xl font-bold text-warm-900 mb-2">
-            Couldn&apos;t load current reading activity
-          </h1>
-          <p className="text-warm-600 text-sm mb-5">{request.message}</p>
-          <button
-            onClick={() => void fetchReading()}
-            className="bg-warm-700 text-cream px-4 py-2 rounded-lg font-medium hover:bg-warm-800 transition-colors text-sm"
-          >
-            Try Again
-          </button>
-        </div>
+        <LoadError
+          title="Couldn't load current reading activity"
+          message={request.message}
+          onRetry={() => void fetchReading()}
+        />
       </div>
     );
   }

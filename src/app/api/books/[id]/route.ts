@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { bookGoogleIds, books, userBooks, users } from "@/lib/db/schema";
+import { books } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { authorizeCurrentUser } from "@/lib/authorization";
 import {
@@ -8,7 +7,8 @@ import {
   requestBodyErrorResponse,
   withApiErrorBoundary,
 } from "@/lib/api-response";
-import { toBookDetailDto, toRelationshipDto } from "@/lib/book-dto";
+import { toRelationshipDto } from "@/lib/book-dto";
+import { readBookDetail } from "@/lib/book-read";
 import { withSqliteBusyRetry } from "@/lib/db/transaction";
 import { sanitizeReview } from "@/lib/sanitize";
 import {
@@ -43,36 +43,17 @@ export async function GET(
     return apiError("INVALID_BOOK_ID", "Invalid book ID", 400);
   }
 
-  const book = await db.select().from(books).where(eq(books.id, id)).get();
+  const book = await readBookDetail(
+    id,
+    authorization.user,
+    authorization.user.role === "admin",
+  );
 
   if (!book) {
     return apiError("BOOK_NOT_FOUND", "Book not found", 404);
   }
 
-  const bookUsers = await db
-    .select({
-      userBook: userBooks,
-      user: users,
-    })
-    .from(userBooks)
-    .innerJoin(users, eq(userBooks.userId, users.id))
-    .where(eq(userBooks.bookId, book.id))
-    .all();
-  const googleAliases = await db
-    .select({ googleBooksId: bookGoogleIds.googleBooksId })
-    .from(bookGoogleIds)
-    .where(eq(bookGoogleIds.bookId, book.id))
-    .all();
-
-    return NextResponse.json(
-    toBookDetailDto(
-      book,
-      bookUsers,
-      authorization.user.id,
-      authorization.user.role === "admin",
-      googleAliases.map((alias) => alias.googleBooksId),
-    ),
-    );
+    return NextResponse.json(book);
   }, "Get book error", "Failed to load book");
 }
 

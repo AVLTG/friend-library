@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import Image from "next/image";
 import Link from "next/link";
 import { Star } from "lucide-react";
+import { getSpineWidth } from "./spine-width";
 
 export interface BookData {
   id: string;
@@ -34,7 +35,6 @@ export default function BookSpine({ book, index, href }: BookSpineProps) {
   const [isHovered, setIsHovered] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
-  const [imageLoaded, setImageLoaded] = useState(false);
   const [previewPosition, setPreviewPosition] = useState<PreviewPosition>({
     left: 12,
     top: 12,
@@ -44,7 +44,7 @@ export default function BookSpine({ book, index, href }: BookSpineProps) {
   const hoverTimeout = useRef<ReturnType<typeof setTimeout>>(null);
   const spineRef = useRef<HTMLAnchorElement>(null);
   const previewId = useId();
-  const spineWidth = Math.max(28, Math.min(55, (book.pageCount || 200) / 8));
+  const spineWidth = getSpineWidth(book.pageCount);
   const active = isHovered || isFocused;
 
   const checkPosition = useCallback(() => {
@@ -161,27 +161,14 @@ export default function BookSpine({ book, index, href }: BookSpineProps) {
           transition={{ type: "spring", stiffness: 300, damping: 20 }}
         >
           {book.coverUrl ? (
-            <>
-              <Image
-                src={book.coverUrl}
-                alt=""
-                fill
-                className="object-cover"
-                sizes="100px"
-                quality={50}
-              />
-              <Image
-                src={book.coverUrl}
-                alt=""
-                fill
-                className={`object-cover transition-opacity duration-700 ${
-                  imageLoaded ? "opacity-100" : "opacity-0"
-                }`}
-                sizes="200px"
-                unoptimized
-                onLoad={() => setImageLoaded(true)}
-              />
-            </>
+            <Image
+              src={book.coverUrl}
+              alt=""
+              fill
+              className="object-cover"
+              sizes="55px"
+              quality={50}
+            />
           ) : null}
 
           <div

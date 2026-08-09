@@ -38,6 +38,10 @@ describe("middleware security", () => {
     expect(response.headers.get("content-security-policy")).toContain(
       "default-src 'self'",
     );
+    await expect(response.json()).resolves.toEqual({
+      error: "Invalid request origin",
+      code: "INVALID_ORIGIN",
+    });
   });
 
   it("returns JSON 401 for protected APIs without a session", async () => {
@@ -45,7 +49,28 @@ describe("middleware security", () => {
       new NextRequest("https://bookshare.example/api/books"),
     );
     expect(response.status).toBe(401);
-    await expect(response.json()).resolves.toEqual({ error: "Unauthorized" });
+    await expect(response.json()).resolves.toEqual({
+      error: "Unauthorized",
+      code: "UNAUTHORIZED",
+    });
+  });
+
+  it("returns a stable JSON error when API origin configuration is invalid", async () => {
+    vi.stubEnv("APP_ORIGIN", "not-an-origin");
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const response = await middleware(
+      new NextRequest("https://bookshare.example/api/books", {
+        method: "POST",
+        headers: { origin: "https://bookshare.example" },
+      }),
+    );
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({
+      error: "Security configuration unavailable",
+      code: "SECURITY_CONFIGURATION_UNAVAILABLE",
+    });
+    consoleError.mockRestore();
   });
 
   it("redirects a valid session away from login", async () => {

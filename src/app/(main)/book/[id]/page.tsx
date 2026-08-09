@@ -19,8 +19,17 @@ import {
   BookMarked,
 } from "lucide-react";
 import StarRating from "@/components/StarRating";
+import ConfirmationPanel from "@/components/ConfirmationPanel";
+import FeedbackMessage from "@/components/FeedbackMessage";
 import { ApiError, apiErrorMessage, apiFetch } from "@/lib/api-client";
-import type { BookDetailDto, RelationshipDto } from "@/lib/api-types";
+import {
+  bookDetailResponseSchema,
+  relationshipResponseSchema,
+  successResponseSchema,
+  type BookDetailDto,
+  type RelationshipDto,
+} from "@/lib/api-types";
+import { reconcileCurrentUserRelationship } from "@/lib/book-client-state";
 
 type RelationshipMutation = "status" | "review" | "clear" | "remove";
 
@@ -142,9 +151,11 @@ export default function BookDetailPage({
     setLoadError(null);
 
     try {
-      const data = await apiFetch<BookDetailDto>(`/api/books/${requestedId}`, {
-        signal: controller.signal,
-      });
+      const data = await apiFetch(
+        `/api/books/${requestedId}`,
+        bookDetailResponseSchema,
+        { signal: controller.signal },
+      );
       if (
         sequence !== requestSequenceRef.current ||
         routeIdRef.current !== requestedId
@@ -209,14 +220,7 @@ export default function BookDetailPage({
     if (routeIdRef.current !== requestedId) return;
     setBook((currentBook) =>
       currentBook?.id === requestedId
-        ? {
-            ...currentBook,
-            currentUserBook: relationship,
-            permissions: {
-              ...currentBook.permissions,
-              canRemoveRelationship: true,
-            },
-          }
+        ? reconcileCurrentUserRelationship(currentBook, relationship)
         : currentBook,
     );
   }
@@ -245,8 +249,9 @@ export default function BookDetailPage({
     } as const;
 
     try {
-      const relationship = await apiFetch<RelationshipDto>(
+      const relationship = await apiFetch(
         `/api/books/${requestedId}`,
+        relationshipResponseSchema,
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -259,7 +264,6 @@ export default function BookDetailPage({
         type: "success",
         message: `${statusLabels[field][0].toUpperCase()}${statusLabels[field].slice(1)} updated.`,
       });
-      await fetchBook(requestedId);
     } catch (error) {
       if (routeIdRef.current === requestedId) {
         setFeedback({
@@ -286,8 +290,9 @@ export default function BookDetailPage({
     const requestedId = id;
     let saved = false;
     try {
-      const relationship = await apiFetch<RelationshipDto>(
+      const relationship = await apiFetch(
         `/api/books/${requestedId}`,
+        relationshipResponseSchema,
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -301,7 +306,6 @@ export default function BookDetailPage({
       closeReviewForm(false);
       saved = true;
       setFeedback({ type: "success", message: "Rating and review saved." });
-      await fetchBook(requestedId);
     } catch (error) {
       if (routeIdRef.current === requestedId) {
         setFeedback({
@@ -322,8 +326,9 @@ export default function BookDetailPage({
 
     const requestedId = id;
     try {
-      const relationship = await apiFetch<RelationshipDto>(
+      const relationship = await apiFetch(
         `/api/books/${requestedId}`,
+        relationshipResponseSchema,
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -335,7 +340,6 @@ export default function BookDetailPage({
       setReviewText("");
       setReviewRating(null);
       setFeedback({ type: "success", message: "Rating and review cleared." });
-      await fetchBook(requestedId);
     } catch (error) {
       if (routeIdRef.current === requestedId) {
         setFeedback({
@@ -354,9 +358,11 @@ export default function BookDetailPage({
     setDeleting(true);
     setFeedback(null);
     try {
-      await apiFetch<{ success: true }>(`/api/books/${requestedId}`, {
-        method: "DELETE",
-      });
+      await apiFetch(
+        `/api/books/${requestedId}`,
+        successResponseSchema,
+        { method: "DELETE" },
+      );
       if (routeIdRef.current === requestedId) {
         setFeedback({
           type: "success",
@@ -386,21 +392,15 @@ export default function BookDetailPage({
     const requestedId = id;
     let removed = false;
     try {
-      await apiFetch<{ success: true }>(
+      await apiFetch(
         `/api/books/${requestedId}/relationship`,
+        successResponseSchema,
         { method: "DELETE" },
       );
       if (routeIdRef.current !== requestedId) return;
       setBook((currentBook) =>
         currentBook?.id === requestedId
-          ? {
-              ...currentBook,
-              currentUserBook: null,
-              permissions: {
-                ...currentBook.permissions,
-                canRemoveRelationship: false,
-              },
-            }
+          ? reconcileCurrentUserRelationship(currentBook, null)
           : currentBook,
       );
       setShowReviewForm(false);
@@ -409,7 +409,6 @@ export default function BookDetailPage({
       setShowRemoveConfirm(false);
       setFeedback({ type: "success", message: "Your activity was removed." });
       removed = true;
-      await fetchBook(requestedId);
     } catch (error) {
       if (routeIdRef.current === requestedId) {
         setFeedback({
@@ -495,9 +494,9 @@ export default function BookDetailPage({
       </button>
 
       {loadError && (
-        <div
-          role="alert"
-          className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+        <FeedbackMessage
+          type="error"
+          className="mb-4 flex flex-wrap items-center justify-between gap-3 px-4 py-3"
         >
           <span>{loadError}. The displayed details may be out of date.</span>
           <button
@@ -506,22 +505,18 @@ export default function BookDetailPage({
           >
             Retry refresh
           </button>
-        </div>
+        </FeedbackMessage>
       )}
 
       {feedback && (
-        <div
+        <FeedbackMessage
           ref={feedbackRef}
           tabIndex={-1}
-          role={feedback.type === "error" ? "alert" : "status"}
-          className={`mb-4 rounded-lg border px-4 py-3 text-sm ${
-            feedback.type === "error"
-              ? "border-red-200 bg-red-50 text-red-700"
-              : "border-green-200 bg-green-50 text-green-700"
-          }`}
+          type={feedback.type}
+          className="mb-4 px-4 py-3"
         >
           {feedback.message}
-        </div>
+        </FeedbackMessage>
       )}
 
       <motion.div
@@ -709,102 +704,46 @@ export default function BookDetailPage({
 
             <AnimatePresence>
               {showRemoveConfirm && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="overflow-hidden mt-4"
-                >
-                  <div
-                    id="remove-activity-confirmation"
-                    role="region"
-                    aria-labelledby="remove-activity-title"
-                    aria-describedby="remove-activity-description"
-                    onKeyDown={(event) => {
-                      if (event.key === "Escape" && !relationshipLocked) closeRemoveConfirm();
-                    }}
-                    className="p-4 bg-warm-50 border border-warm-500 rounded-lg"
-                  >
-                    <p id="remove-activity-title" className="break-words text-warm-800 text-sm font-medium mb-1">
-                      Remove your activity for &quot;{book.title}&quot;?
-                    </p>
-                    <p id="remove-activity-description" className="text-warm-700 text-xs mb-3">
-                      Your statuses, rating, and review will be removed. The book and everyone else&apos;s activity will remain.
-                    </p>
-                    <div className="flex flex-col gap-2 sm:flex-row">
-                      <button
-                        type="button"
-                        onClick={removeRelationship}
-                        disabled={relationshipLocked}
-                        className="flex min-h-11 w-full items-center justify-center gap-2 px-4 py-2 bg-warm-700 text-white rounded-lg text-sm font-medium hover:bg-warm-800 transition-colors disabled:opacity-50 sm:w-auto"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                        {relationshipPending === "remove"
-                          ? "Removing..."
-                          : "Remove my activity"}
-                      </button>
-                      <button
-                        ref={removeCancelRef}
-                        type="button"
-                        onClick={closeRemoveConfirm}
-                        disabled={relationshipLocked}
-                        className="min-h-11 w-full px-4 py-2 text-warm-700 hover:bg-warm-100 rounded-lg text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                </motion.div>
+                <ConfirmationPanel
+                  id="remove-activity-confirmation"
+                  titleId="remove-activity-title"
+                  descriptionId="remove-activity-description"
+                  title={<>Remove your activity for &quot;{book.title}&quot;?</>}
+                  description={<>Your statuses, rating, and review will be removed. The book and everyone else&apos;s activity will remain.</>}
+                  variant="warm"
+                  confirmLabel="Remove my activity"
+                  pendingLabel="Removing..."
+                  pending={relationshipPending === "remove"}
+                  confirmIcon={<X className="w-3.5 h-3.5" />}
+                  confirmDisabled={relationshipLocked}
+                  cancelDisabled={relationshipLocked}
+                  cancelRef={removeCancelRef}
+                  onConfirm={removeRelationship}
+                  onCancel={closeRemoveConfirm}
+                />
               )}
             </AnimatePresence>
 
             {/* Delete confirmation */}
             <AnimatePresence>
               {showDeleteConfirm && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="overflow-hidden mt-4"
-                >
-                  <div
-                    id="delete-book-confirmation"
-                    role="region"
-                    aria-labelledby="delete-book-title"
-                    aria-describedby="delete-book-description"
-                    onKeyDown={(event) => {
-                      if (event.key === "Escape" && !deleting) closeDeleteConfirm();
-                    }}
-                    className="p-4 bg-red-50 border border-red-200 rounded-lg"
-                  >
-                    <p id="delete-book-title" className="break-words text-red-800 text-sm font-medium mb-1">
-                      Delete &quot;{book.title}&quot; from the shared library?
-                    </p>
-                    <p id="delete-book-description" className="text-red-700 text-xs mb-3">
-                      This will remove the book and all associated reviews, ratings, and ownership records for everyone.
-                    </p>
-                    <div className="flex flex-col gap-2 sm:flex-row">
-                      <button
-                        type="button"
-                        onClick={deleteBook}
-                        disabled={deleting || relationshipPending !== null}
-                        className="flex min-h-11 w-full items-center justify-center gap-2 px-4 py-2 bg-red-700 text-white rounded-lg text-sm font-medium hover:bg-red-800 transition-colors disabled:opacity-50 sm:w-auto"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                        {deleting ? "Deleting..." : "Yes, delete it"}
-                      </button>
-                      <button
-                        ref={deleteCancelRef}
-                        type="button"
-                        onClick={closeDeleteConfirm}
-                        disabled={deleting}
-                        className="min-h-11 w-full px-4 py-2 text-warm-700 hover:bg-warm-100 rounded-lg text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                </motion.div>
+                <ConfirmationPanel
+                  id="delete-book-confirmation"
+                  titleId="delete-book-title"
+                  descriptionId="delete-book-description"
+                  title={<>Delete &quot;{book.title}&quot; from the shared library?</>}
+                  description="This will remove the book and all associated reviews, ratings, and ownership records for everyone."
+                  variant="danger"
+                  confirmLabel="Yes, delete it"
+                  pendingLabel="Deleting..."
+                  pending={deleting}
+                  confirmIcon={<Trash2 className="w-3.5 h-3.5" />}
+                  confirmDisabled={deleting || relationshipPending !== null}
+                  cancelDisabled={deleting}
+                  cancelRef={deleteCancelRef}
+                  onConfirm={deleteBook}
+                  onCancel={closeDeleteConfirm}
+                />
               )}
             </AnimatePresence>
           </div>
@@ -872,9 +811,12 @@ export default function BookDetailPage({
                 </div>
 
                 {reviewText.trim() && reviewRating === null && (
-                  <p className="mb-3 text-sm text-red-700" role="alert">
+                  <FeedbackMessage
+                    type="error"
+                    className="mb-3 border-0 bg-transparent p-0"
+                  >
                     Choose a rating before saving a written review.
-                  </p>
+                  </FeedbackMessage>
                 )}
 
                 <div className="flex flex-wrap gap-3">
