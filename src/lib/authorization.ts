@@ -6,6 +6,9 @@ import { users, type UserRole } from "./db/schema";
 interface AuthorizedUser {
   id: string;
   username: string;
+  firstName: string;
+  lastName: string;
+  avatarColor: string;
   role: UserRole;
 }
 
@@ -22,7 +25,14 @@ export async function authorizeCurrentUser(
   }
 
   const user = await db
-    .select({ id: users.id, username: users.username, role: users.role })
+    .select({
+      id: users.id,
+      username: users.username,
+      firstName: users.firstName,
+      lastName: users.lastName,
+      avatarColor: users.avatarColor,
+      role: users.role,
+    })
     .from(users)
     .where(eq(users.id, session.userId))
     .get();

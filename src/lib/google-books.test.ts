@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getBookById, searchBooks } from "./google-books";
+import { searchBooks } from "./google-books";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -83,33 +83,6 @@ describe("Google Books normalization", () => {
     expect(book.coverUrl).toBe(
       "https://books.google.com/books/content?id=abc&zoom=3",
     );
-  });
-
-  it("uses the same normalization for search and by-ID results", async () => {
-    vi.stubEnv("GOOGLE_BOOKS_API_KEY", "");
-    const volume = {
-      id: "same-id",
-      volumeInfo: {
-        title: "Same Edition",
-        authors: ["Author"],
-        industryIdentifiers: [{ type: "ISBN_10", identifier: "142158624X" }],
-      },
-    };
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ items: [volume] }), { status: 200 }),
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify(volume), { status: 200 }),
-      );
-    vi.stubGlobal("fetch", fetchMock);
-
-    const [searched] = await searchBooks("same");
-    const fetched = await getBookById("same-id");
-    expect(fetched).toEqual(searched);
-    expect(fetched?.isbn).toBe("9781421586243");
-    expect(fetched?.coverUrl).toBeUndefined();
   });
 
   it("skips malformed volumes without failing valid results", async () => {

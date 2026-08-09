@@ -1,6 +1,9 @@
 "use client";
 
-import type { ApiErrorBody } from "./api-types";
+import {
+  apiErrorResponseSchema,
+  type ResponseSchema,
+} from "./api-types";
 
 export class ApiError extends Error {
   constructor(
@@ -28,6 +31,7 @@ function redirectToLogin() {
 
 export async function apiFetch<T>(
   input: RequestInfo | URL,
+  responseSchema: ResponseSchema<T>,
   init?: RequestInit,
   options: ApiFetchOptions = {},
 ): Promise<T> {
@@ -56,13 +60,13 @@ export async function apiFetch<T>(
   }
 
   if (!response.ok) {
-    const errorBody = body as Partial<ApiErrorBody> | null;
-    const message =
-      typeof errorBody?.error === "string"
-        ? errorBody.error
-        : `Request failed (${response.status})`;
-    const code =
-      typeof errorBody?.code === "string" ? errorBody.code : "REQUEST_FAILED";
+    const errorResult = apiErrorResponseSchema.safeParse(body);
+    const message = errorResult.success
+      ? errorResult.data.error
+      : `Request failed (${response.status})`;
+    const code = errorResult.success
+      ? errorResult.data.code
+      : "REQUEST_FAILED";
     const retryAfterHeader = response.headers.get("Retry-After");
     const retryAfter = retryAfterHeader ? Number(retryAfterHeader) : null;
 
@@ -77,7 +81,16 @@ export async function apiFetch<T>(
     );
   }
 
-  return body as T;
+  const result = responseSchema.safeParse(body);
+  if (!result.success) {
+    throw new ApiError(
+      "The server returned an invalid response",
+      response.status,
+      "INVALID_RESPONSE",
+    );
+  }
+
+  return result.data;
 }
 
 export function apiErrorMessage(error: unknown, fallback: string): string {

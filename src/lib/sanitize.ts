@@ -1,5 +1,5 @@
 // Strip HTML tags to prevent XSS in user-generated content
-export function stripHtml(input: string): string {
+function stripHtml(input: string): string {
   return input.replace(/<[^>]*>/g, "");
 }
 
@@ -19,18 +19,4 @@ export function sanitizeName(input: string): string {
 // Sanitize a review: trim, strip HTML, enforce max length
 export function sanitizeReview(input: string): string {
   return stripHtml(input).trim().slice(0, 5000);
-}
-
-// Validate rating value
-export function validateRating(value: unknown): number | null {
-  if (
-    typeof value !== "number" ||
-    !Number.isFinite(value) ||
-    value < 0.5 ||
-    value > 5 ||
-    !Number.isInteger(value * 2)
-  ) {
-    return null;
-  }
-  return value;
 }

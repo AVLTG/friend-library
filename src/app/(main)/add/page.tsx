@@ -17,57 +17,19 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { ApiError, apiErrorMessage, apiFetch } from "@/lib/api-client";
-import type { BookDto, CreateBookDto, SearchBookDto } from "@/lib/api-types";
 import {
-  findEditionIdentityMatch,
-  normalizeDuplicateText,
-  normalizeGoogleBooksId,
-} from "@/lib/book-identity";
+  bookIdentitiesResponseSchema,
+  createBookResponseSchema,
+  searchResultsResponseSchema,
+  type BookIdentityDto,
+  type SearchBookDto,
+} from "@/lib/api-types";
+import type { AddBookRequestBody } from "@/lib/validation";
+import type { BookSearchClassification } from "@/lib/book-duplicates";
+import { classifyBookSearchResults } from "@/lib/book-duplicates";
+import { normalizeGoogleBooksId } from "@/lib/book-identity";
 
-type MatchedSearchResult = SearchBookDto & { existingBookId: string };
-type AddableSearchResult = SearchBookDto & {
-  possibleWorkTitle?: string;
-  identityConflict?: true;
-};
 type LibraryStatus = "loading" | "ready" | "error";
-
-function textSimilar(a: string, b: string): boolean {
-  const na = normalizeDuplicateText(a);
-  const nb = normalizeDuplicateText(b);
-  if (!na || !nb) return false;
-  if (na === nb) return true;
-
-  const aChars = [...na];
-  const bChars = [...nb];
-  const longer = aChars.length > bChars.length ? aChars : bChars;
-  const shorter = aChars.length > bChars.length ? bChars : aChars;
-  if (shorter.length / longer.length < 0.8) return false;
-
-  let matches = 0;
-  const unmatched = [...longer];
-  for (const ch of shorter) {
-    const idx = unmatched.indexOf(ch);
-    if (idx !== -1) {
-      matches++;
-      unmatched.splice(idx, 1);
-    }
-  }
-  return matches / longer.length > 0.9;
-}
-
-function isPossibleWorkMatch(result: SearchBookDto, existing: BookDto): boolean {
-  if (!textSimilar(result.title, existing.title)) return false;
-
-  const resultAuthors = result.authors
-    .map(normalizeDuplicateText)
-    .filter(Boolean);
-  const existingAuthors = existing.authors
-    .map(normalizeDuplicateText)
-    .filter(Boolean);
-  return resultAuthors.some((a) =>
-    existingAuthors.some((b) => a === b || a.includes(b) || b.includes(a)),
-  );
-}
 
 function formatSearchError(error: unknown): string {
   if (!(error instanceof ApiError)) {
@@ -99,7 +61,7 @@ export default function AddBookPage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [showManual, setShowManual] = useState(false);
-  const [existingBooks, setExistingBooks] = useState<BookDto[]>([]);
+  const [existingBooks, setExistingBooks] = useState<BookIdentityDto[]>([]);
   const [libraryStatus, setLibraryStatus] = useState<LibraryStatus>("loading");
   const [libraryError, setLibraryError] = useState("");
   const [libraryRequest, setLibraryRequest] = useState(0);
@@ -123,7 +85,9 @@ export default function AddBookPage() {
     setLibraryStatus("loading");
     setLibraryError("");
 
-    apiFetch<BookDto[]>("/api/books", { signal: controller.signal })
+    apiFetch("/api/books/identities", bookIdentitiesResponseSchema, {
+      signal: controller.signal,
+    })
       .then((books) => {
         if (!active) return;
         setExistingBooks(books);
@@ -154,38 +118,17 @@ export default function AddBookPage() {
     };
   }, []);
 
-  const { matchedResults, addableResults } = useMemo(() => {
+  const { matchedResults, addableResults } = useMemo<
+    BookSearchClassification<SearchBookDto>
+  >(() => {
     if (libraryStatus !== "ready") {
       return {
-        matchedResults: [] as MatchedSearchResult[],
-        addableResults: results as AddableSearchResult[],
+        matchedResults: [],
+        addableResults: results,
       };
     }
 
-    const matched: MatchedSearchResult[] = [];
-    const addable: AddableSearchResult[] = [];
-
-    for (const result of results) {
-      const { bookId, conflict } = findEditionIdentityMatch(
-        result.id,
-        result.isbn,
-        existingBooks,
-      );
-      if (bookId && !conflict) {
-        matched.push({ ...result, existingBookId: bookId });
-      } else {
-        const possibleWork = existingBooks.find((book) =>
-          isPossibleWorkMatch(result, book),
-        );
-        addable.push({
-          ...result,
-          ...(conflict ? { identityConflict: true as const } : {}),
-          ...(possibleWork ? { possibleWorkTitle: possibleWork.title } : {}),
-        });
-      }
-    }
-
-    return { matchedResults: matched, addableResults: addable };
+    return classifyBookSearchResults(results, existingBooks);
   }, [results, existingBooks, libraryStatus]);
 
   function handleSearchInput(value: string) {
@@ -208,8 +151,9 @@ export default function AddBookPage() {
       const controller = new AbortController();
       searchController.current = controller;
       try {
-        const data = await apiFetch<SearchBookDto[]>(
+        const data = await apiFetch(
           `/api/books/search?q=${encodeURIComponent(trimmedQuery)}`,
+          searchResultsResponseSchema,
           { signal: controller.signal },
         );
         if (sequence === searchSequence.current) {
@@ -308,13 +252,17 @@ export default function AddBookPage() {
           ? { categories: selectedBook.categories }
           : {}),
         ...(googleBooksId ? { googleBooksId } : {}),
-      };
+      } satisfies AddBookRequestBody;
 
-      const data = await apiFetch<CreateBookDto>("/api/books", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(bookData),
-      });
+      const data = await apiFetch(
+        "/api/books",
+        createBookResponseSchema,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(bookData),
+        },
+      );
       router.push(`/book/${data.bookId}`);
     } catch (error) {
       setSaveError(apiErrorMessage(error, "Failed to add book. Please try again."));

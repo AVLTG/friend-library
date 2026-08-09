@@ -4,6 +4,7 @@ import { useMemo, useRef, useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import Shelf from "./Shelf";
 import BookSpine, { type BookData } from "./BookSpine";
+import { getSpineWidth } from "./spine-width";
 
 const EXTRA_EMPTY_SHELVES = 2;
 
@@ -66,11 +67,6 @@ function WoodPanel({
   );
 }
 
-// Same formula as BookSpine uses for width
-function getSpineWidth(book: BookData): number {
-  return Math.max(28, Math.min(55, (book.pageCount || 200) / 8));
-}
-
 export default function Bookshelf({ books }: BookshelfProps) {
   const shelvesRef = useRef<HTMLDivElement>(null);
   const [shelfWidth, setShelfWidth] = useState(800);
@@ -94,7 +90,7 @@ export default function Bookshelf({ books }: BookshelfProps) {
     const gap = 2; // gap-[2px] between spines
 
     for (const book of books) {
-      const w = getSpineWidth(book) + gap;
+      const w = getSpineWidth(book.pageCount) + gap;
       if (currentWidth + w > shelfWidth && currentShelf.length > 0) {
         result.push(currentShelf);
         currentShelf = [];

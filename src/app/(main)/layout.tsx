@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { ApiError, apiErrorMessage, apiFetch } from "@/lib/api-client";
+import { successResponseSchema } from "@/lib/api-types";
 import {
   BookOpen,
   Library,
@@ -61,8 +62,9 @@ export default function MainLayout({
     setLogoutError(null);
 
     try {
-      await apiFetch<{ success: true }>(
+      await apiFetch(
         "/api/auth/logout",
+        successResponseSchema,
         { method: "POST" },
         { redirectOnUnauthorized: false },
       );

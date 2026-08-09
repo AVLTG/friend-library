@@ -48,7 +48,7 @@ describe("book DTO serialization", () => {
     const dto = toBookDetailDto(
       book,
       [{ user, userBook: relationship }],
-      user.id,
+      user,
       false,
       ["primary-google-id", "alternate-google-id"],
     );

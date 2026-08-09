@@ -38,9 +38,18 @@ export function resolveRelationshipState(
     );
   }
 
-  const definedChanges = Object.fromEntries(
-    Object.entries(changes).filter(([, value]) => value !== undefined),
-  ) as RelationshipChanges;
+  const definedChanges: RelationshipChanges = {
+    ...(changes.owned !== undefined ? { owned: changes.owned } : {}),
+    ...(changes.read !== undefined ? { read: changes.read } : {}),
+    ...(changes.currentlyReading !== undefined
+      ? { currentlyReading: changes.currentlyReading }
+      : {}),
+    ...(changes.annotated !== undefined
+      ? { annotated: changes.annotated }
+      : {}),
+    ...(changes.rating !== undefined ? { rating: changes.rating } : {}),
+    ...(changes.review !== undefined ? { review: changes.review } : {}),
+  };
   const next = { ...(current || emptyRelationship), ...definedChanges };
   if (changes.read === true) next.currentlyReading = false;
   if (changes.currentlyReading === true) next.read = false;

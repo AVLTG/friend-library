@@ -157,9 +157,5 @@ export const rateLimitBuckets = sqliteTable(
 
 // Type exports
 export type User = typeof users.$inferSelect;
-export type NewUser = typeof users.$inferInsert;
 export type Book = typeof books.$inferSelect;
-export type BookGoogleId = typeof bookGoogleIds.$inferSelect;
-export type NewBook = typeof books.$inferInsert;
 export type UserBook = typeof userBooks.$inferSelect;
-export type InviteToken = typeof inviteTokens.$inferSelect;

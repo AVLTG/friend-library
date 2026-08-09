@@ -4,10 +4,12 @@ import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { BookOpen, Eye, EyeOff } from "lucide-react";
+import { BookOpen } from "lucide-react";
+import FeedbackMessage from "@/components/FeedbackMessage";
+import PasswordField from "@/components/PasswordField";
 import { apiErrorMessage, apiFetch } from "@/lib/api-client";
-
-type RegisterSuccessDto = { success: true };
+import { successResponseSchema } from "@/lib/api-types";
+import type { RegistrationRequestBody } from "@/lib/validation";
 
 export default function RegisterPage() {
   return (
@@ -33,7 +35,6 @@ function RegisterForm() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const [inviteToken, setInviteToken] = useState(
     searchParams.get("token") || ""
   );
@@ -46,18 +47,20 @@ function RegisterForm() {
     setLoading(true);
 
     try {
-      await apiFetch<RegisterSuccessDto>(
+      const payload = {
+        username,
+        firstName,
+        lastName,
+        password,
+        inviteToken,
+      } satisfies RegistrationRequestBody;
+      await apiFetch(
         "/api/auth/register",
+        successResponseSchema,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            username,
-            firstName,
-            lastName,
-            password,
-            inviteToken,
-          }),
+          body: JSON.stringify(payload),
         },
         { redirectOnUnauthorized: false },
       );
@@ -162,48 +165,26 @@ function RegisterForm() {
             </div>
 
             <div className="mb-6">
-              <label htmlFor="register-password" className="block text-sm font-medium text-warm-700 mb-1.5">
-                Password
-              </label>
-              <div className="relative">
-                <input
-                  type={showPassword ? "text" : "password"}
-                  id="register-password"
-                  autoComplete="new-password"
-                  aria-describedby="register-password-help"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-cream border border-warm-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-700 focus:border-transparent text-warm-900 placeholder-warm-600 pr-12"
-                  placeholder="Min 10 chars, mixed case, number, symbol"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  aria-label={showPassword ? "Hide password" : "Show password"}
-                  className="absolute right-1 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg text-warm-600 hover:bg-warm-100 hover:text-warm-800"
-                >
-                  {showPassword ? (
-                    <EyeOff className="w-5 h-5" />
-                  ) : (
-                    <Eye className="w-5 h-5" />
-                  )}
-                </button>
-              </div>
-              <p id="register-password-help" className="text-xs text-warm-600 mt-1.5">
-                Use at least 10 characters with uppercase, lowercase, a number, and a symbol.
-              </p>
+              <PasswordField
+                id="register-password"
+                label="Password"
+                autoComplete="new-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                labelClassName="block text-sm font-medium text-warm-700 mb-1.5"
+                inputClassName="w-full px-4 py-2.5 bg-cream border border-warm-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-700 focus:border-transparent text-warm-900 placeholder-warm-600 pr-12"
+                placeholder="Min 10 chars, mixed case, number, symbol"
+                help="Use at least 10 characters with uppercase, lowercase, a number, and a symbol."
+                helpId="register-password-help"
+                helpClassName="text-xs text-warm-600 mt-1.5"
+                required
+              />
             </div>
 
             {error && (
-              <motion.div
-                role="alert"
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm"
-              >
+              <FeedbackMessage type="error" animated className="mb-4 p-3">
                 {error}
-              </motion.div>
+              </FeedbackMessage>
             )}
 
             <button

@@ -1,14 +1,11 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { bookGoogleIds, books, userBooks, users } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
 import { getSession, generateId, randomSpineColor } from "@/lib/auth";
 import {
   BookIdentityConflictError,
   createOrAttachBook,
 } from "@/lib/book-write";
 import { normalizeGoogleBooksId, normalizeIsbn } from "@/lib/book-identity";
-import { toBookDto } from "@/lib/book-dto";
+import { readBooks } from "@/lib/book-read";
 import {
   apiError,
   requestBodyErrorResponse,
@@ -29,34 +26,7 @@ export async function GET() {
     return apiError("UNAUTHORIZED", "Unauthorized", 401);
   }
 
-  const allBooks = await db.select().from(books).all();
-
-  // Get user_books data for each book
-  const booksWithDetails = await Promise.all(
-    allBooks.map(async (book) => {
-      const bookUsers = await db
-        .select({
-          userBook: userBooks,
-          user: users,
-        })
-        .from(userBooks)
-        .innerJoin(users, eq(userBooks.userId, users.id))
-        .where(eq(userBooks.bookId, book.id))
-        .all();
-      const googleAliases = await db
-        .select({ googleBooksId: bookGoogleIds.googleBooksId })
-        .from(bookGoogleIds)
-        .where(eq(bookGoogleIds.bookId, book.id))
-        .all();
-
-      return toBookDto(
-        book,
-        bookUsers,
-        session.userId,
-        googleAliases.map((alias) => alias.googleBooksId),
-      );
-    })
-  );
+  const booksWithDetails = await readBooks(session.userId);
 
     return NextResponse.json(booksWithDetails);
   }, "List books error", "Failed to load books");

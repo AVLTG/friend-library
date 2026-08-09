@@ -113,6 +113,14 @@ export const searchQuerySchema = z
   .object({ q: z.string().trim().min(2).max(200) })
   .strict();
 
+export type LoginRequestBody = z.infer<typeof loginSchema>;
+export type RegistrationRequestBody = z.infer<typeof registrationSchema>;
+export type SetupRequestBody = z.infer<typeof setupSchema>;
+export type AccountUpdateRequestBody = z.infer<typeof accountUpdateSchema>;
+export type AddBookRequestBody = z.infer<typeof addBookSchema>;
+export type UpdateBookRequestBody = z.infer<typeof updateBookSchema>;
+export type SearchQuery = z.infer<typeof searchQuerySchema>;
+
 export class RequestBodyError extends Error {
   constructor(
     message: string,

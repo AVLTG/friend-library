@@ -4,12 +4,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { BookOpen, Eye, EyeOff } from "lucide-react";
+import { BookOpen } from "lucide-react";
+import FeedbackMessage from "@/components/FeedbackMessage";
+import PasswordField from "@/components/PasswordField";
 import { ApiError, apiErrorMessage, apiFetch } from "@/lib/api-client";
-
-type SetupStatusDto = { needsSetup: boolean };
-type AuthSuccessDto = { success: true };
-type SetupSuccessDto = AuthSuccessDto & { inviteToken: string };
+import {
+  setupStatusResponseSchema,
+  setupSuccessResponseSchema,
+  successResponseSchema,
+} from "@/lib/api-types";
+import type { LoginRequestBody, SetupRequestBody } from "@/lib/validation";
 
 type SetupRequest =
   | { status: "loading" }
@@ -20,7 +24,6 @@ export default function LoginPage() {
   const router = useRouter();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [setupRequest, setSetupRequest] = useState<SetupRequest>({
@@ -40,8 +43,9 @@ export default function LoginPage() {
     setSetupRequest({ status: "loading" });
 
     try {
-      const data = await apiFetch<SetupStatusDto>(
+      const data = await apiFetch(
         "/api/auth/check-setup",
+        setupStatusResponseSchema,
         { signal: controller.signal },
         { redirectOnUnauthorized: false },
       );
@@ -80,12 +84,14 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      await apiFetch<AuthSuccessDto>(
+      const payload = { username, password } satisfies LoginRequestBody;
+      await apiFetch(
         "/api/auth/login",
+        successResponseSchema,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username, password }),
+          body: JSON.stringify(payload),
         },
         { redirectOnUnauthorized: false },
       );
@@ -105,12 +111,19 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const data = await apiFetch<SetupSuccessDto>(
+      const payload = {
+        username,
+        firstName,
+        lastName,
+        password,
+      } satisfies SetupRequestBody;
+      const data = await apiFetch(
         "/api/auth/setup",
+        setupSuccessResponseSchema,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username, firstName, lastName, password }),
+          body: JSON.stringify(payload),
         },
         { redirectOnUnauthorized: false },
       );
@@ -149,9 +162,9 @@ export default function LoginPage() {
       <main className="min-h-screen bg-cream flex items-center justify-center p-4">
         <div className="card-warm p-8 max-w-md w-full text-center">
           <BookOpen className="w-8 h-8 text-warm-500 mx-auto mb-4" />
-          <div role="alert" className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+          <FeedbackMessage type="error" className="mb-4 p-3">
             {setupRequest.message}
-          </div>
+          </FeedbackMessage>
           <button
             type="button"
             onClick={() => void checkSetup()}
@@ -286,50 +299,26 @@ export default function LoginPage() {
             </div>
 
             <div className="mb-6">
-              <label htmlFor="login-password" className="block text-sm font-medium text-warm-700 mb-1.5">
-                Password
-              </label>
-              <div className="relative">
-                <input
-                  type={showPassword ? "text" : "password"}
-                  id="login-password"
-                  autoComplete={isSetup ? "current-password" : "new-password"}
-                  aria-describedby={!isSetup ? "setup-password-help" : undefined}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-cream border border-warm-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-700 focus:border-transparent text-warm-900 placeholder-warm-600 pr-12"
-                  placeholder="Min 10 chars, mixed case, number, symbol"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  aria-label={showPassword ? "Hide password" : "Show password"}
-                  className="absolute right-1 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg text-warm-600 hover:bg-warm-100 hover:text-warm-800"
-                >
-                  {showPassword ? (
-                    <EyeOff className="w-5 h-5" />
-                  ) : (
-                    <Eye className="w-5 h-5" />
-                  )}
-                </button>
-              </div>
-              {!isSetup && (
-                <p id="setup-password-help" className="mt-1.5 text-xs text-warm-600">
-                  Use at least 10 characters with uppercase, lowercase, a number, and a symbol.
-                </p>
-              )}
+              <PasswordField
+                id="login-password"
+                label="Password"
+                autoComplete={isSetup ? "current-password" : "new-password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                labelClassName="block text-sm font-medium text-warm-700 mb-1.5"
+                inputClassName="w-full px-4 py-2.5 bg-cream border border-warm-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-700 focus:border-transparent text-warm-900 placeholder-warm-600 pr-12"
+                placeholder="Min 10 chars, mixed case, number, symbol"
+                help={!isSetup ? "Use at least 10 characters with uppercase, lowercase, a number, and a symbol." : undefined}
+                helpId="setup-password-help"
+                helpClassName="mt-1.5 text-xs text-warm-600"
+                required
+              />
             </div>
 
             {error && (
-              <motion.div
-                role="alert"
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm"
-              >
+              <FeedbackMessage type="error" animated className="mb-4 p-3">
                 {error}
-              </motion.div>
+              </FeedbackMessage>
             )}
 
             <button

@@ -2,8 +2,18 @@
 
 import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
+import FeedbackMessage from "@/components/FeedbackMessage";
+import PasswordField from "@/components/PasswordField";
 import { apiErrorMessage, apiFetch } from "@/lib/api-client";
-import type { PublicUserDto } from "@/lib/api-types";
+import {
+  createInviteResponseSchema,
+  inviteListResponseSchema,
+  publicUserResponseSchema,
+  successResponseSchema,
+  type InviteListItemDto,
+  type PublicUserDto,
+} from "@/lib/api-types";
+import type { AccountUpdateRequestBody } from "@/lib/validation";
 import {
   Copy,
   Check,
@@ -12,23 +22,12 @@ import {
   Clock,
   User,
   BookOpen,
-  Eye,
-  EyeOff,
   Lock,
   Save,
 } from "lucide-react";
 
-interface InviteToken {
-  id: string;
-  token: string;
-  usedBy: string | null;
-  usedAt: string | null;
-  expiresAt: string;
-  createdAt: string;
-}
-
 export default function SettingsPage() {
-  const [tokens, setTokens] = useState<InviteToken[]>([]);
+  const [tokens, setTokens] = useState<InviteListItemDto[]>([]);
   const [tokensLoading, setTokensLoading] = useState(true);
   const [tokensError, setTokensError] = useState<string | null>(null);
   const [inviteActionError, setInviteActionError] = useState<string | null>(null);
@@ -45,12 +44,9 @@ export default function SettingsPage() {
   const [lastName, setLastName] = useState("");
   const [username, setUsername] = useState("");
   const [usernamePassword, setUsernamePassword] = useState("");
-  const [showUsernamePassword, setShowUsernamePassword] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
-  const [showNewPassword, setShowNewPassword] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [profileMessage, setProfileMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -79,7 +75,7 @@ export default function SettingsPage() {
     setTokensError(null);
 
     try {
-      const data = await apiFetch<InviteToken[]>("/api/invite", {
+      const data = await apiFetch("/api/invite", inviteListResponseSchema, {
         signal: controller.signal,
       });
       if (tokensRequestRef.current === controller) setTokens(data);
@@ -103,7 +99,9 @@ export default function SettingsPage() {
     setGenerating(true);
     setInviteActionError(null);
     try {
-      await apiFetch<InviteToken>("/api/invite", { method: "POST" });
+      await apiFetch("/api/invite", createInviteResponseSchema, {
+        method: "POST",
+      });
       await fetchTokens();
     } catch (error) {
       setInviteActionError(
@@ -147,9 +145,11 @@ export default function SettingsPage() {
     setProfileError(null);
 
     try {
-      const data = await apiFetch<PublicUserDto>("/api/auth/account", {
-        signal: controller.signal,
-      });
+      const data = await apiFetch(
+        "/api/auth/account",
+        publicUserResponseSchema,
+        { signal: controller.signal },
+      );
       if (profileRequestRef.current === controller) {
         setProfile(data);
         if (profileEditVersionRef.current === preserveEditsSince) {
@@ -181,18 +181,23 @@ export default function SettingsPage() {
     const submittedEditVersion = profileEditVersionRef.current;
 
     try {
-      await apiFetch<{ success: true }>("/api/auth/account", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          firstName,
-          lastName,
-          username,
-          ...(username !== profile?.username
-            ? { currentPassword: usernamePassword }
-            : {}),
-        }),
-      });
+      const payload = {
+        firstName,
+        lastName,
+        username,
+        ...(username !== profile?.username
+          ? { currentPassword: usernamePassword }
+          : {}),
+      } satisfies AccountUpdateRequestBody;
+      await apiFetch(
+        "/api/auth/account",
+        successResponseSchema,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        },
+      );
 
       setProfileMessage({ type: "success", text: "Profile updated" });
       setUsernamePassword("");
@@ -220,11 +225,19 @@ export default function SettingsPage() {
     }
 
     try {
-      await apiFetch<{ success: true }>("/api/auth/account", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ currentPassword, newPassword }),
-      });
+      const payload = {
+        currentPassword,
+        newPassword,
+      } satisfies AccountUpdateRequestBody;
+      await apiFetch(
+        "/api/auth/account",
+        successResponseSchema,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        },
+      );
 
       setPasswordMessage({ type: "success", text: "Password changed" });
       setCurrentPassword("");
@@ -271,7 +284,7 @@ export default function SettingsPage() {
 
       {profileError && !profile && (
         <div className="card-warm p-4 sm:p-6 mb-8">
-          <div role="alert" className="p-3 rounded-lg text-sm bg-red-50 border border-red-200 text-red-700">
+          <FeedbackMessage type="error" className="p-3">
             <p>{profileError}</p>
             <button
               type="button"
@@ -280,7 +293,7 @@ export default function SettingsPage() {
             >
               Retry
             </button>
-          </div>
+          </FeedbackMessage>
         </div>
       )}
 
@@ -305,7 +318,7 @@ export default function SettingsPage() {
           </div>
 
           {profileError && (
-            <div role="alert" className="p-3 rounded-lg text-sm bg-red-50 border border-red-200 text-red-700 mb-4">
+            <FeedbackMessage type="error" className="p-3 mb-4">
               <p>{profileError}</p>
               <button
                 type="button"
@@ -314,7 +327,7 @@ export default function SettingsPage() {
               >
                 Retry
               </button>
-            </div>
+            </FeedbackMessage>
           )}
 
           <form onSubmit={saveProfile} className="space-y-4">
@@ -375,54 +388,31 @@ export default function SettingsPage() {
 
             {usernameChanged && (
               <div>
-                <label htmlFor="settings-username-password" className="block text-sm font-medium text-warm-700 mb-1.5">
-                  Current Password
-                </label>
-                <div className="relative">
-                  <input
-                    type={showUsernamePassword ? "text" : "password"}
-                    id="settings-username-password"
-                    autoComplete="current-password"
-                    aria-describedby="settings-username-password-help"
-                    value={usernamePassword}
-                    onChange={(e) => setUsernamePassword(e.target.value)}
-                    className="w-full px-4 py-2.5 pr-12 bg-cream border border-warm-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-700 focus:border-transparent text-warm-900 text-base sm:text-sm"
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setShowUsernamePassword(!showUsernamePassword)
-                    }
-                    aria-label={showUsernamePassword ? "Hide current password" : "Show current password"}
-                    className="absolute right-1 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg text-warm-600 hover:bg-warm-100 hover:text-warm-800"
-                  >
-                    {showUsernamePassword ? (
-                      <EyeOff className="w-4 h-4" />
-                    ) : (
-                      <Eye className="w-4 h-4" />
-                    )}
-                  </button>
-                </div>
-                <p id="settings-username-password-help" className="text-warm-600 text-xs mt-1">
-                  Required because your username is used to sign in.
-                </p>
+                <PasswordField
+                  id="settings-username-password"
+                  label="Current Password"
+                  autoComplete="current-password"
+                  value={usernamePassword}
+                  onChange={(e) => setUsernamePassword(e.target.value)}
+                  labelClassName="block text-sm font-medium text-warm-700 mb-1.5"
+                  inputClassName="w-full px-4 py-2.5 pr-12 bg-cream border border-warm-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-700 focus:border-transparent text-warm-900 text-base sm:text-sm"
+                  revealIconClassName="w-4 h-4"
+                  help="Required because your username is used to sign in."
+                  helpId="settings-username-password-help"
+                  helpClassName="text-warm-600 text-xs mt-1"
+                  required
+                />
               </div>
             )}
 
             {profileMessage && (
-              <motion.div
-                role={profileMessage.type === "error" ? "alert" : "status"}
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className={`p-3 rounded-lg text-sm ${
-                  profileMessage.type === "success"
-                    ? "bg-green-50 border border-green-200 text-green-700"
-                    : "bg-red-50 border border-red-200 text-red-700"
-                }`}
+              <FeedbackMessage
+                type={profileMessage.type}
+                animated
+                className="p-3"
               >
                 {profileMessage.text}
-              </motion.div>
+              </FeedbackMessage>
             )}
 
             <button
@@ -455,58 +445,35 @@ export default function SettingsPage() {
 
         <form onSubmit={changePassword} className="space-y-4">
           <div>
-            <label htmlFor="settings-current-password" className="block text-sm font-medium text-warm-700 mb-1.5">
-              Current Password
-            </label>
-            <div className="relative">
-              <input
-                type={showCurrentPassword ? "text" : "password"}
-                id="settings-current-password"
-                autoComplete="current-password"
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                className="w-full px-4 py-2.5 bg-cream border border-warm-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-700 focus:border-transparent text-warm-900 text-base sm:text-sm pr-12"
-                required
-              />
-              <button
-                type="button"
-                onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                aria-label={showCurrentPassword ? "Hide current password" : "Show current password"}
-                className="absolute right-1 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg text-warm-600 hover:bg-warm-100 hover:text-warm-800"
-              >
-                {showCurrentPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            </div>
+            <PasswordField
+              id="settings-current-password"
+              label="Current Password"
+              autoComplete="current-password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              labelClassName="block text-sm font-medium text-warm-700 mb-1.5"
+              inputClassName="w-full px-4 py-2.5 bg-cream border border-warm-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-700 focus:border-transparent text-warm-900 text-base sm:text-sm pr-12"
+              revealIconClassName="w-4 h-4"
+              required
+            />
           </div>
 
           <div>
-            <label htmlFor="settings-new-password" className="block text-sm font-medium text-warm-700 mb-1.5">
-              New Password
-            </label>
-            <div className="relative">
-              <input
-                type={showNewPassword ? "text" : "password"}
-                id="settings-new-password"
-                autoComplete="new-password"
-                aria-describedby="settings-new-password-help"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="Min 10 chars, mixed case, number, symbol"
-                className="w-full px-4 py-2.5 bg-cream border border-warm-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-700 focus:border-transparent text-warm-900 placeholder-warm-600 text-base sm:text-sm pr-12"
-                required
-              />
-              <button
-                type="button"
-                onClick={() => setShowNewPassword(!showNewPassword)}
-                aria-label={showNewPassword ? "Hide new password" : "Show new password"}
-                className="absolute right-1 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg text-warm-600 hover:bg-warm-100 hover:text-warm-800"
-              >
-                {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            </div>
-            <p id="settings-new-password-help" className="mt-1.5 text-xs text-warm-600">
-              Use at least 10 characters with uppercase, lowercase, a number, and a symbol.
-            </p>
+            <PasswordField
+              id="settings-new-password"
+              label="New Password"
+              autoComplete="new-password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="Min 10 chars, mixed case, number, symbol"
+              labelClassName="block text-sm font-medium text-warm-700 mb-1.5"
+              inputClassName="w-full px-4 py-2.5 bg-cream border border-warm-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-700 focus:border-transparent text-warm-900 placeholder-warm-600 text-base sm:text-sm pr-12"
+              revealIconClassName="w-4 h-4"
+              help="Use at least 10 characters with uppercase, lowercase, a number, and a symbol."
+              helpId="settings-new-password-help"
+              helpClassName="mt-1.5 text-xs text-warm-600"
+              required
+            />
           </div>
 
           <div>
@@ -525,18 +492,13 @@ export default function SettingsPage() {
           </div>
 
           {passwordMessage && (
-            <motion.div
-              role={passwordMessage.type === "error" ? "alert" : "status"}
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className={`p-3 rounded-lg text-sm ${
-                passwordMessage.type === "success"
-                  ? "bg-green-50 border border-green-200 text-green-700"
-                  : "bg-red-50 border border-red-200 text-red-700"
-              }`}
+            <FeedbackMessage
+              type={passwordMessage.type}
+              animated
+              className="p-3"
             >
               {passwordMessage.text}
-            </motion.div>
+            </FeedbackMessage>
           )}
 
           <button
@@ -577,7 +539,7 @@ export default function SettingsPage() {
         </div>
 
         {tokensError && (
-          <div role="alert" className="p-3 rounded-lg text-sm bg-red-50 border border-red-200 text-red-700 mb-4">
+          <FeedbackMessage type="error" className="p-3 mb-4">
             <p>{tokensError}</p>
             <button
               type="button"
@@ -586,13 +548,13 @@ export default function SettingsPage() {
             >
               Retry
             </button>
-          </div>
+          </FeedbackMessage>
         )}
 
         {inviteActionError && (
-          <div role="alert" className="p-3 rounded-lg text-sm bg-red-50 border border-red-200 text-red-700 mb-4">
+          <FeedbackMessage type="error" className="p-3 mb-4">
             {inviteActionError}
-          </div>
+          </FeedbackMessage>
         )}
 
         {tokensLoading ? (

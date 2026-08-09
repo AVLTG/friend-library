@@ -62,4 +62,16 @@ describe("book identity normalization", () => {
       findEditionIdentityMatch("google-alias", "9780062000767", books),
     ).toEqual({ bookId: null, conflict: true });
   });
+
+  it("flags a Google match with a contradictory untracked ISBN", () => {
+    expect(
+      findEditionIdentityMatch("google-a", "9780140449235", [
+        {
+          id: "book-a",
+          googleBooksIds: ["google-a"],
+          isbn: "9781443411066",
+        },
+      ]),
+    ).toEqual({ bookId: null, conflict: true });
+  });
 });
