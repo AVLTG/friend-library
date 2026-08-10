@@ -46,6 +46,10 @@ function stringArray(value: string | null): string[] {
   }
 }
 
+function normalizePageCount(value: number | null): number | null {
+  return value !== null && Number.isInteger(value) && value > 0 ? value : null;
+}
+
 export function toPublicUser(user: PublicUser): PublicUserDto {
   return {
     id: user.id,
@@ -104,7 +108,7 @@ export function toBookDto(
     isbn: book.isbn,
     description: book.description,
     coverUrl: safeCoverUrl(book.coverUrl),
-    pageCount: book.pageCount,
+    pageCount: normalizePageCount(book.pageCount),
     publishedDate: book.publishedDate,
     categories: stringArray(book.categories),
     spineColor: book.spineColor,
@@ -185,7 +189,7 @@ export function toReadingEntryDto(
       authors: stringArray(book.authors),
       coverUrl: safeCoverUrl(book.coverUrl),
       spineColor: book.spineColor,
-      pageCount: book.pageCount,
+      pageCount: normalizePageCount(book.pageCount),
     },
     user: toPublicUser(user),
   };
