@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { toBookDetailDto } from "./book-dto";
+import { toBookDetailDto, toReadingEntryDto } from "./book-dto";
+import {
+  bookDetailResponseSchema,
+  booksResponseSchema,
+  readingEntriesResponseSchema,
+} from "./api-types";
 import type { Book, User, UserBook } from "./db/schema";
 
 const now = new Date("2026-08-08T10:00:00.000Z");
@@ -80,5 +85,24 @@ describe("book DTO serialization", () => {
       canDeleteGlobally: false,
       canRemoveRelationship: true,
     });
+  });
+
+  it("normalizes legacy zero page counts to missing metadata", () => {
+    const legacyBook = { ...book, pageCount: 0 };
+    const detail = toBookDetailDto(
+      legacyBook,
+      [{ user, userBook: relationship }],
+      user,
+      false,
+    );
+    const readingEntry = toReadingEntryDto(legacyBook, user);
+
+    expect(detail.pageCount).toBeNull();
+    expect(readingEntry.book.pageCount).toBeNull();
+    expect(bookDetailResponseSchema.safeParse(detail).success).toBe(true);
+    expect(booksResponseSchema.safeParse([detail]).success).toBe(true);
+    expect(readingEntriesResponseSchema.safeParse([readingEntry]).success).toBe(
+      true,
+    );
   });
 });
